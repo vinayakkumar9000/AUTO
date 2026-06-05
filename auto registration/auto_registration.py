@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Auto Registration Workflow v2.1
+Auto Registration Workflow v3.1
 Universal, robust, and lightweight automation for registration forms
 Author: vinayakkumar9000
 """
