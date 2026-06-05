@@ -1,0 +1,55 @@
+{
+  "timestamp": "2026-06-05T20:46:30.823605",
+  "metrics": {
+    "total_tests": 4,
+    "successful_tests": 0,
+    "failed_tests": 4,
+    "success_rate": 0.0,
+    "avg_duration": 1.250056266784668,
+    "field_detection_accuracy": {},
+    "field_fill_success_rate": {},
+    "total_duration": 9.340646266937256
+  },
+  "results": [
+    {
+      "test_name": "Basic Email Only",
+      "success": false,
+      "duration_seconds": 0.23868703842163086,
+      "error_message": "'Identity' object has no attribute 'birth_year'",
+      "fields_detected": [],
+      "fields_filled": {},
+      "screenshot_path": "D:\\AUTO\\auto registration\\.test_screenshots\\Basic_Email_Only_error_1780672583.png",
+      "timestamp": "2026-06-05T20:46:23.600745"
+    },
+    {
+      "test_name": "Multi-Step Email + OTP",
+      "success": false,
+      "duration_seconds": 0.05528688430786133,
+      "error_message": "'Identity' object has no attribute 'birth_year'",
+      "fields_detected": [],
+      "fields_filled": {},
+      "screenshot_path": "D:\\AUTO\\auto registration\\.test_screenshots\\Multi-Step_Email_+_OTP_error_1780672584.png",
+      "timestamp": "2026-06-05T20:46:24.271850"
+    },
+    {
+      "test_name": "Complex Full Registration",
+      "success": false,
+      "duration_seconds": 0.06447529792785645,
+      "error_message": "'Identity' object has no attribute 'birth_year'",
+      "fields_detected": [],
+      "fields_filled": {},
+      "screenshot_path": "D:\\AUTO\\auto registration\\.test_screenshots\\Complex_Full_Registration_error_1780672584.png",
+      "timestamp": "2026-06-05T20:46:24.973324"
+    },
+    {
+      "test_name": "React Form",
+      "success": false,
+      "duration_seconds": 4.641775846481323,
+      "error_message": "'Identity' object has no attribute 'birth_year'",
+      "fields_detected": [],
+      "fields_filled": {},
+      "screenshot_path": "D:\\AUTO\\auto registration\\.test_screenshots\\React_Form_error_1780672590.png",
+      "timestamp": "2026-06-05T20:46:30.222743"
+    }
+  ]
+}

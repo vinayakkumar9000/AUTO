@@ -43,17 +43,25 @@ FIELD_PATTERNS = {
     ],
     "confirm_password": [
         (r'\bconfirm[\s\-_]*password\b', 100),
-        (r'\bpassword[\s\-_]*confirm\b', 95),
-        (r'\bre[\s\-_]*enter[\s\-_]*password\b', 90),
-        (r'\bverify[\s\-_]*password\b', 85),
+        (r'\bpassword[\s\-_]*confirm\b', 100),
+        (r'\bre[\s\-_]*enter[\s\-_]*password\b', 100),
+        (r'\bverify[\s\-_]*password\b', 100),
+        (r'\bpassword[\s\-_]*2\b', 95),
+        (r'\bconfirm[\s\-_]*pwd\b', 95),
+        (r'\brepeat[\s\-_]*password\b', 95),
     ],
     "otp": [
         (r'\botp\b', 100),
-        (r'\bcode\b', 90),
-        (r'\bverif', 85),
-        (r'\b2fa\b', 80),
-        (r'\bmfa\b', 80),
-        (r'\bone[\-_]?time\b', 75),
+        (r'\bverification[\s\-_]*code\b', 100),
+        (r'\bverify[\s\-_]*code\b', 100),
+        (r'\bcode\b', 95),
+        (r'\bverif', 95),
+        (r'\b2fa\b', 90),
+        (r'\bmfa\b', 90),
+        (r'\bone[\s\-_]*time\b', 90),
+        (r'\bauth[\s\-_]*code\b', 95),
+        (r'\bpin\b', 85),
+        (r'\btoken\b', 85),
     ],
     "first_name": [
         (r'\bfirst[\s\-_]*name\b', 100),
@@ -389,10 +397,17 @@ class FormDetectionEngine:
             if max_score > 0:
                 scores[field_type] = max_score
         
-        # Special handling for password confirmation
+        # Special handling for password vs confirm_password
         if 'password' in scores and 'confirm_password' in scores:
-            # If both match, prefer confirm_password if it has higher score
-            if scores['confirm_password'] > scores['password']:
+            # If confirm_password score is >= password score, prefer confirm_password
+            # This ensures fields like "confirmPassword" are correctly identified
+            if scores['confirm_password'] >= scores['password']:
+                return 'confirm_password', scores['confirm_password']
+            # Only return password if it has significantly higher score
+            elif scores['password'] > scores['confirm_password'] + 10:
+                return 'password', scores['password']
+            # Default to confirm_password in ambiguous cases
+            else:
                 return 'confirm_password', scores['confirm_password']
         
         # Return highest scoring field type
@@ -418,7 +433,7 @@ class FormDetectionEngine:
 
 async def set_field_value(locator: Locator, value: str, verbose: bool = True) -> bool:
     """
-    Set field value with framework-aware fallback chain.
+    Set field value with framework-aware fallback chain and robust validation.
     Tries multiple methods to ensure React/Vue/Angular state updates.
     Returns True if successful, False otherwise.
     """
@@ -427,82 +442,133 @@ async def set_field_value(locator: Locator, value: str, verbose: bool = True) ->
         if verbose:
             print(f"[FILL] {msg}")
     
-    # Method 1: Playwright fill (works for most cases)
+    # Escape value for JavaScript to prevent injection issues
+    escaped_value = value.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "\\r")
+    
+    # Method 1: Playwright fill with validation
     try:
         log(f"Trying fill() method...")
+        await locator.clear()
+        await asyncio.sleep(0.05)
         await locator.fill(value)
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.15)
         
         # Verify it worked
         current_value = await locator.input_value()
         if current_value == value:
             log(f"✓ fill() succeeded")
             return True
+        else:
+            log(f"fill() validation failed: expected '{value}', got '{current_value}'")
     except Exception as e:
         log(f"fill() failed: {e}")
     
-    # Method 2: Type character by character
+    # Method 2: Type character by character with slower delay
     try:
         log(f"Trying type() method...")
         await locator.clear()
-        await locator.type(value, delay=50)
         await asyncio.sleep(0.1)
+        await locator.type(value, delay=75)
+        await asyncio.sleep(0.15)
         
         current_value = await locator.input_value()
         if current_value == value:
             log(f"✓ type() succeeded")
             return True
+        else:
+            log(f"type() validation failed: expected '{value}', got '{current_value}'")
     except Exception as e:
         log(f"type() failed: {e}")
     
-    # Method 3: JavaScript value injection + events
+    # Method 3: JavaScript value injection + comprehensive events
     try:
         log(f"Trying JavaScript injection...")
         await locator.evaluate(f"""
             el => {{
-                el.value = '{value}';
+                // Clear first
+                el.value = '';
                 
-                // Trigger events for React/Vue/Angular
-                el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                el.dispatchEvent(new Event('blur', {{ bubbles: true }}));
+                // Set value
+                el.value = '{escaped_value}';
                 
-                // React-specific
-                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                    window.HTMLInputElement.prototype, 'value'
-                ).set;
-                nativeInputValueSetter.call(el, '{value}');
+                // React-specific setter (must be before events)
+                try {{
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value'
+                    ).set;
+                    if (nativeInputValueSetter) {{
+                        nativeInputValueSetter.call(el, '{escaped_value}');
+                    }}
+                }} catch (e) {{}}
                 
-                const event = new Event('input', {{ bubbles: true }});
-                el.dispatchEvent(event);
+                // Trigger comprehensive event chain
+                el.dispatchEvent(new Event('input', {{ bubbles: true, cancelable: true }}));
+                el.dispatchEvent(new Event('change', {{ bubbles: true, cancelable: true }}));
+                el.dispatchEvent(new Event('keydown', {{ bubbles: true, cancelable: true }}));
+                el.dispatchEvent(new Event('keyup', {{ bubbles: true, cancelable: true }}));
+                el.dispatchEvent(new Event('blur', {{ bubbles: true, cancelable: true }}));
+                
+                // Vue-specific
+                el.dispatchEvent(new Event('update:modelValue', {{ bubbles: true }}));
             }}
         """)
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.25)
         
         current_value = await locator.input_value()
         if current_value == value:
             log(f"✓ JavaScript injection succeeded")
             return True
+        else:
+            log(f"JavaScript validation failed: expected '{value}', got '{current_value}'")
     except Exception as e:
         log(f"JavaScript injection failed: {e}")
     
-    # Method 4: Focus + type + blur
+    # Method 4: Focus + clear + type + blur with validation
     try:
         log(f"Trying focus + type + blur...")
         await locator.focus()
         await asyncio.sleep(0.1)
-        await locator.clear()
+        
+        # Triple-clear to ensure empty
+        await locator.press("Control+A")
+        await locator.press("Backspace")
+        await asyncio.sleep(0.05)
+        
         await locator.type(value, delay=100)
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.15)
         await locator.blur()
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.25)
         
         current_value = await locator.input_value()
         if current_value == value:
             log(f"✓ focus + type + blur succeeded")
             return True
+        else:
+            log(f"focus+type+blur validation failed: expected '{value}', got '{current_value}'")
     except Exception as e:
         log(f"focus + type + blur failed: {e}")
     
-    log(f"✗ All methods failed to set value")
+    # Method 5: Last resort - press and fill
+    try:
+        log(f"Trying press and fill...")
+        await locator.click()
+        await asyncio.sleep(0.1)
+        await locator.press("Control+A")
+        await locator.press("Delete")
+        await asyncio.sleep(0.05)
+        
+        for char in value:
+            await locator.press(char)
+            await asyncio.sleep(0.05)
+        
+        await asyncio.sleep(0.2)
+        
+        current_value = await locator.input_value()
+        if current_value == value:
+            log(f"✓ press and fill succeeded")
+            return True
+    except Exception as e:
+        log(f"press and fill failed: {e}")
+    
+    log(f"✗ All 5 methods failed to set value")
     return False

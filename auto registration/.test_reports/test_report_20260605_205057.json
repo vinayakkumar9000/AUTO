@@ -1,0 +1,152 @@
+{
+  "timestamp": "2026-06-05T20:50:57.699396",
+  "metrics": {
+    "total_tests": 4,
+    "successful_tests": 1,
+    "failed_tests": 3,
+    "success_rate": 25.0,
+    "avg_duration": 10.596892714500427,
+    "field_detection_accuracy": {
+      "password": 100.0,
+      "otp": 0.0,
+      "username": 100.0,
+      "first_name": 100.0,
+      "confirm_password": 0.0,
+      "email": 100.0,
+      "last_name": 100.0
+    },
+    "field_fill_success_rate": {
+      "password": 25.0,
+      "otp": 0.0,
+      "username": 25.0,
+      "first_name": 25.0,
+      "confirm_password": 0.0,
+      "email": 75.0,
+      "last_name": 25.0
+    },
+    "total_duration": 45.71440529823303
+  },
+  "results": [
+    {
+      "test_name": "Basic Email Only",
+      "success": true,
+      "duration_seconds": 0.33126354217529297,
+      "error_message": null,
+      "fields_detected": [
+        {
+          "field_type": "email",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 254.61316108703613,
+          "context": "main"
+        }
+      ],
+      "fields_filled": {
+        "email": true
+      },
+      "screenshot_path": "D:\\AUTO\\auto registration\\.test_screenshots\\Basic_Email_Only_1780672812.png",
+      "timestamp": "2026-06-05T20:50:12.730885"
+    },
+    {
+      "test_name": "Multi-Step Email + OTP",
+      "success": false,
+      "duration_seconds": 0.27460622787475586,
+      "error_message": "Not all expected fields were filled",
+      "fields_detected": [
+        {
+          "field_type": "email",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 111.63127422332764,
+          "context": "main"
+        },
+        {
+          "field_type": "otp",
+          "detected": false,
+          "confidence": 0,
+          "time_ms": 111.63127422332764,
+          "context": "main"
+        }
+      ],
+      "fields_filled": {
+        "email": true
+      },
+      "screenshot_path": "D:\\AUTO\\auto registration\\.test_screenshots\\Multi-Step_Email_+_OTP_1780672813.png",
+      "timestamp": "2026-06-05T20:50:13.562733"
+    },
+    {
+      "test_name": "Complex Full Registration",
+      "success": false,
+      "duration_seconds": 31.722856760025024,
+      "error_message": "Not all expected fields were filled",
+      "fields_detected": [
+        {
+          "field_type": "email",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 5278.488357861836,
+          "context": "main"
+        },
+        {
+          "field_type": "first_name",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 5278.488357861836,
+          "context": "main"
+        },
+        {
+          "field_type": "last_name",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 5278.488357861836,
+          "context": "main"
+        },
+        {
+          "field_type": "username",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 5278.488357861836,
+          "context": "main"
+        },
+        {
+          "field_type": "password",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 5278.488357861836,
+          "context": "main"
+        },
+        {
+          "field_type": "confirm_password",
+          "detected": false,
+          "confidence": 0,
+          "time_ms": 5278.488357861836,
+          "context": "main"
+        }
+      ],
+      "fields_filled": {
+        "email": true,
+        "password": true,
+        "username": true,
+        "first_name": true,
+        "last_name": true,
+        "phone": true,
+        "date_of_birth": true,
+        "gender": true,
+        "country": true,
+        "checkboxes": true
+      },
+      "screenshot_path": "D:\\AUTO\\auto registration\\.test_screenshots\\Complex_Full_Registration_1780672845.png",
+      "timestamp": "2026-06-05T20:50:45.847538"
+    },
+    {
+      "test_name": "React Form",
+      "success": false,
+      "duration_seconds": 10.058844327926636,
+      "error_message": "Page.goto: Timeout 10000ms exceeded.\nCall log:\n  - navigating to \"file:///D:/AUTO/auto%20registration/tests/react_form.html\", waiting until \"domcontentloaded\"\n",
+      "fields_detected": [],
+      "fields_filled": {},
+      "screenshot_path": "D:\\AUTO\\auto registration\\.test_screenshots\\React_Form_error_1780672856.png",
+      "timestamp": "2026-06-05T20:50:57.110922"
+    }
+  ]
+}

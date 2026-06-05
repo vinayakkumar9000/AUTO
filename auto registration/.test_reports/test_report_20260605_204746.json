@@ -1,0 +1,127 @@
+{
+  "timestamp": "2026-06-05T20:47:46.422145",
+  "metrics": {
+    "total_tests": 4,
+    "successful_tests": 1,
+    "failed_tests": 3,
+    "success_rate": 25.0,
+    "avg_duration": 1.3402941226959229,
+    "field_detection_accuracy": {
+      "password": 100.0,
+      "email": 100.0,
+      "username": 100.0,
+      "otp": 0.0,
+      "confirm_password": 0.0
+    },
+    "field_fill_success_rate": {
+      "password": 25.0,
+      "email": 75.0,
+      "username": 25.0,
+      "otp": 0.0,
+      "confirm_password": 0.0
+    },
+    "total_duration": 8.062293529510498
+  },
+  "results": [
+    {
+      "test_name": "Basic Email Only",
+      "success": true,
+      "duration_seconds": 0.37261009216308594,
+      "error_message": null,
+      "fields_detected": [
+        {
+          "field_type": "email",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 296.0662841796875,
+          "context": "main"
+        }
+      ],
+      "fields_filled": {
+        "email": true
+      },
+      "screenshot_path": "D:\\AUTO\\auto registration\\.test_screenshots\\Basic_Email_Only_1780672659.png",
+      "timestamp": "2026-06-05T20:47:39.156825"
+    },
+    {
+      "test_name": "Multi-Step Email + OTP",
+      "success": false,
+      "duration_seconds": 0.28879380226135254,
+      "error_message": "Not all expected fields were filled",
+      "fields_detected": [
+        {
+          "field_type": "email",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 117.90943145751953,
+          "context": "main"
+        },
+        {
+          "field_type": "otp",
+          "detected": false,
+          "confidence": 0,
+          "time_ms": 117.90943145751953,
+          "context": "main"
+        }
+      ],
+      "fields_filled": {
+        "email": true
+      },
+      "screenshot_path": "D:\\AUTO\\auto registration\\.test_screenshots\\Multi-Step_Email_+_OTP_1780672659.png",
+      "timestamp": "2026-06-05T20:47:40.001848"
+    },
+    {
+      "test_name": "Complex Full Registration",
+      "success": false,
+      "duration_seconds": 1.4737582206726074,
+      "error_message": "'Identity' object has no attribute 'phone'",
+      "fields_detected": [],
+      "fields_filled": {},
+      "screenshot_path": "D:\\AUTO\\auto registration\\.test_screenshots\\Complex_Full_Registration_error_1780672661.png",
+      "timestamp": "2026-06-05T20:47:42.020130"
+    },
+    {
+      "test_name": "React Form",
+      "success": false,
+      "duration_seconds": 3.2260143756866455,
+      "error_message": "Not all expected fields were filled",
+      "fields_detected": [
+        {
+          "field_type": "email",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 157.59825706481934,
+          "context": "main"
+        },
+        {
+          "field_type": "username",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 157.59825706481934,
+          "context": "main"
+        },
+        {
+          "field_type": "password",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 157.59825706481934,
+          "context": "main"
+        },
+        {
+          "field_type": "confirm_password",
+          "detected": false,
+          "confidence": 0,
+          "time_ms": 157.59825706481934,
+          "context": "main"
+        }
+      ],
+      "fields_filled": {
+        "email": true,
+        "password": true,
+        "username": true
+      },
+      "screenshot_path": "D:\\AUTO\\auto registration\\.test_screenshots\\React_Form_1780672665.png",
+      "timestamp": "2026-06-05T20:47:45.805609"
+    }
+  ]
+}

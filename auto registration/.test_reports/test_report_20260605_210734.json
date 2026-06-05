@@ -1,0 +1,187 @@
+{
+  "timestamp": "2026-06-05T21:07:34.676923",
+  "metrics": {
+    "total_tests": 4,
+    "successful_tests": 3,
+    "failed_tests": 1,
+    "success_rate": 75.0,
+    "avg_duration": 9.352158784866333,
+    "field_detection_accuracy": {
+      "confirm_password": 100.0,
+      "last_name": 100.0,
+      "username": 100.0,
+      "email": 100.0,
+      "first_name": 100.0,
+      "password": 100.0,
+      "otp": 0.0
+    },
+    "field_fill_success_rate": {
+      "confirm_password": 50.0,
+      "last_name": 25.0,
+      "username": 50.0,
+      "email": 100.0,
+      "first_name": 25.0,
+      "password": 50.0,
+      "otp": 0.0
+    },
+    "total_duration": 40.08865165710449
+  },
+  "results": [
+    {
+      "test_name": "Basic Email Only",
+      "success": true,
+      "duration_seconds": 0.348278284072876,
+      "error_message": null,
+      "fields_detected": [
+        {
+          "field_type": "email",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 264.45913314819336,
+          "context": "main"
+        }
+      ],
+      "fields_filled": {
+        "email": true
+      },
+      "screenshot_path": "D:\\AUTO\\auto registration\\.test_screenshots\\Basic_Email_Only_1780673815.png",
+      "timestamp": "2026-06-05T21:06:55.358434"
+    },
+    {
+      "test_name": "Multi-Step Email + OTP",
+      "success": false,
+      "duration_seconds": 0.27584052085876465,
+      "error_message": "Not all expected fields were filled",
+      "fields_detected": [
+        {
+          "field_type": "email",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 110.11815071105957,
+          "context": "main"
+        },
+        {
+          "field_type": "otp",
+          "detected": false,
+          "confidence": 0,
+          "time_ms": 110.11815071105957,
+          "context": "main"
+        }
+      ],
+      "fields_filled": {
+        "email": true
+      },
+      "screenshot_path": "D:\\AUTO\\auto registration\\.test_screenshots\\Multi-Step_Email_+_OTP_1780673816.png",
+      "timestamp": "2026-06-05T21:06:56.188758"
+    },
+    {
+      "test_name": "Complex Full Registration",
+      "success": true,
+      "duration_seconds": 31.840802669525146,
+      "error_message": null,
+      "fields_detected": [
+        {
+          "field_type": "email",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 5298.334121704102,
+          "context": "main"
+        },
+        {
+          "field_type": "first_name",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 5298.334121704102,
+          "context": "main"
+        },
+        {
+          "field_type": "last_name",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 5298.334121704102,
+          "context": "main"
+        },
+        {
+          "field_type": "username",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 5298.334121704102,
+          "context": "main"
+        },
+        {
+          "field_type": "password",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 5298.334121704102,
+          "context": "main"
+        },
+        {
+          "field_type": "confirm_password",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 5298.334121704102,
+          "context": "main"
+        }
+      ],
+      "fields_filled": {
+        "email": true,
+        "password": true,
+        "confirm_password": true,
+        "username": true,
+        "first_name": true,
+        "last_name": true,
+        "phone": true,
+        "date_of_birth": true,
+        "gender": true,
+        "country": true,
+        "checkboxes": true
+      },
+      "screenshot_path": "D:\\AUTO\\auto registration\\.test_screenshots\\Complex_Full_Registration_1780673848.png",
+      "timestamp": "2026-06-05T21:07:28.589212"
+    },
+    {
+      "test_name": "React Form",
+      "success": true,
+      "duration_seconds": 4.943713665008545,
+      "error_message": null,
+      "fields_detected": [
+        {
+          "field_type": "email",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 189.3368363380432,
+          "context": "main"
+        },
+        {
+          "field_type": "username",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 189.3368363380432,
+          "context": "main"
+        },
+        {
+          "field_type": "password",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 189.3368363380432,
+          "context": "main"
+        },
+        {
+          "field_type": "confirm_password",
+          "detected": true,
+          "confidence": 100,
+          "time_ms": 189.3368363380432,
+          "context": "main"
+        }
+      ],
+      "fields_filled": {
+        "email": true,
+        "password": true,
+        "confirm_password": true,
+        "username": true
+      },
+      "screenshot_path": "D:\\AUTO\\auto registration\\.test_screenshots\\React_Form_1780673854.png",
+      "timestamp": "2026-06-05T21:07:34.088873"
+    }
+  ]
+}

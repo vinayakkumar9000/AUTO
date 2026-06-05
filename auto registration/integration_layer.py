@@ -37,11 +37,17 @@ class UnifiedFormFiller:
         self.dynamic_handler = DynamicFormHandler(page, verbose)
         self.password_manager = PasswordManager()
         self.username_manager = UsernameManager()
-        self.dob_handler = DOBHandler(
-            identity.birth_year,
-            identity.birth_month,
-            identity.birth_day
-        )
+        
+        # Parse date_of_birth string (format: dd-mm-yyyy)
+        if hasattr(identity, 'date_of_birth') and identity.date_of_birth:
+            try:
+                day, month, year = map(int, identity.date_of_birth.split('-'))
+                self.dob_handler = DOBHandler(year, month, day)
+            except:
+                # Fallback to default values if parsing fails
+                self.dob_handler = DOBHandler(2000, 1, 1)
+        else:
+            self.dob_handler = DOBHandler(2000, 1, 1)
         self.dropdown_handler = DropdownHandler(identity)
         
         # Track filled fields
@@ -89,19 +95,31 @@ class UnifiedFormFiller:
         return self.filled_fields
     
     async def _fill_email(self, fields: list, email: str):
-        """Fill email field."""
+        """Fill email field with validation."""
         email_field = next((f for f in fields if f.field_type == "email"), None)
         
         if email_field:
             self.log(f"Filling email field (confidence={email_field.confidence})...")
             success = await set_field_value(email_field.locator, email, self.verbose)
+            
+            # Validate the value was set correctly
+            if success:
+                try:
+                    actual_value = await email_field.locator.input_value()
+                    if actual_value != email:
+                        self.log(f"Email validation failed, retrying... (expected: {email}, got: {actual_value})")
+                        await email_field.locator.clear()
+                        success = await set_field_value(email_field.locator, email, self.verbose)
+                except:
+                    pass
+            
             self.filled_fields["email"] = success
         else:
             self.log("No email field found")
             self.filled_fields["email"] = False
     
     async def _fill_password(self, fields: list):
-        """Fill password and confirm password fields."""
+        """Fill password and confirm password fields with validation and retry."""
         password_fields = [f for f in fields if f.field_type == "password"]
         confirm_fields = [f for f in fields if f.field_type == "confirm_password"]
         
@@ -109,14 +127,26 @@ class UnifiedFormFiller:
             password = self.password_manager.get_or_generate()
             self.log(f"Generated password: {password}")
             
-            # Fill password field
+            # Fill password field with retry
             if password_fields:
-                success = await set_field_value(password_fields[0].locator, password, self.verbose)
+                success = False
+                for attempt in range(3):
+                    success = await set_field_value(password_fields[0].locator, password, self.verbose)
+                    if success:
+                        break
+                    self.log(f"Password fill attempt {attempt + 1} failed, retrying...")
+                    await asyncio.sleep(0.5)
                 self.filled_fields["password"] = success
             
-            # Fill confirm password field
+            # Fill confirm password field with retry
             if confirm_fields:
-                success = await set_field_value(confirm_fields[0].locator, password, self.verbose)
+                success = False
+                for attempt in range(3):
+                    success = await set_field_value(confirm_fields[0].locator, password, self.verbose)
+                    if success:
+                        break
+                    self.log(f"Confirm password fill attempt {attempt + 1} failed, retrying...")
+                    await asyncio.sleep(0.5)
                 self.filled_fields["confirm_password"] = success
         else:
             self.log("No password fields found")
@@ -243,7 +273,7 @@ class UnifiedFormFiller:
     async def wait_for_otp_field(self, timeout: int = 15) -> Optional[Any]:
         """
         Wait for OTP field to appear (for multi-step forms).
-        Uses dynamic form handler with MutationObserver.
+        Uses dynamic form handler with MutationObserver and aggressive rescanning.
         
         Args:
             timeout: Maximum seconds to wait
@@ -254,9 +284,25 @@ class UnifiedFormFiller:
         self.log(f"Waiting for OTP field (timeout={timeout}s)...")
         
         async def check_otp():
+            # Force a fresh scan each time
+            self.detection_engine.discovered_fields = []
             fields = await self.detection_engine.discover_all_fields()
             otp_fields = [f for f in fields if f.field_type == "otp"]
-            return otp_fields[0].locator if otp_fields else None
+            
+            if otp_fields:
+                self.log(f"Found OTP field with confidence={otp_fields[0].confidence}")
+                return otp_fields[0].locator
+            
+            # Also try direct selector as fallback
+            try:
+                otp_input = self.page.locator('input[name*="otp" i], input[id*="otp" i], input[placeholder*="code" i], input[placeholder*="verif" i]').first
+                if await otp_input.count() > 0 and await otp_input.is_visible():
+                    self.log("Found OTP field via direct selector fallback")
+                    return otp_input
+            except:
+                pass
+            
+            return None
         
         otp_field = await self.dynamic_handler.smart_wait_for_field(
             check_otp,

@@ -10,7 +10,7 @@
 [![Playwright](https://img.shields.io/badge/Playwright-Async-green.svg)](https://playwright.dev/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Author:** vinayakkumar9000 | **Version:** 3.1
+**Author:** vinayakkumar9000 | **Version:** 3.1.1
 
 </div>
 
