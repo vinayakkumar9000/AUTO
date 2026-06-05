@@ -1,0 +1,80 @@
+
+================================================================================
+ERROR LOGGED: 2026-06-05T13:26:02.998Z
+User ID: vinayakkumar9000@gmail.com
+================================================================================
+Error Name: GatewayError
+Error Message: Failed to handle chat completion - HTTP 400: Bad Request - <html>
+<head><title>400 Bad Request</title></head>
+<body>
+<center><h1>400 Bad Request</h1></center>
+<hr><center>nginx</center>
+</body>
+</html>
+
+
+Stack Trace:
+GatewayError: Failed to handle chat completion - HTTP 400: Bad Request - <html>
+<head><title>400 Bad Request</title></head>
+<body>
+<center><h1>400 Bad Request</h1></center>
+<hr><center>nginx</center>
+</body>
+</html>
+
+    at t.fromResponse (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:765:8546)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async t.createChatCompletion (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:777:8820)
+    at async fnt.createChatCompletionWithTokenRenewal (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2152:235)
+    at async fnt.generateContentStreamInternal (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2157:52)
+    at async H6.loggingStreamWrapper (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:800:31296)
+    at async gY.processStreamResponse (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2463:81)
+    at async file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2457:22044
+    at async kQ.run (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2463:3153)
+    at async nwe.sendMessageStream (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2796:511)
+================================================================================
+
+
+================================================================================
+ERROR LOGGED: 2026-06-05T15:30:52.475Z
+User ID: vinitakumari966174@gmail.com
+================================================================================
+Error Name: GatewayError
+Error Message: Request failed after 6 attempts: fetch failed
+
+Stack Trace:
+GatewayError: Request failed after 6 attempts: fetch failed
+    at t.fetch (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:777:4624)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async t.createChatCompletion (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:777:8410)
+    at async fnt.createChatCompletionWithTokenRenewal (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2152:235)
+    at async fnt.generateContentStreamInternal (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2157:52)
+    at async H6.loggingStreamWrapper (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:800:31296)
+    at async gY.processStreamResponse (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2463:81)
+    at async file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2457:22044
+    at async kQ.run (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2463:3153)
+    at async nwe.sendMessageStream (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2796:511)
+================================================================================
+
+
+================================================================================
+ERROR LOGGED: 2026-06-05T15:31:40.450Z
+User ID: vinitakumari966174@gmail.com
+================================================================================
+Error Name: GatewayError
+Error Message: Request failed after 6 attempts: fetch failed
+
+Stack Trace:
+GatewayError: Request failed after 6 attempts: fetch failed
+    at t.fetch (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:777:4624)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async t.createChatCompletion (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:777:8410)
+    at async fnt.createChatCompletionWithTokenRenewal (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2152:235)
+    at async fnt.generateContentStreamInternal (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2157:52)
+    at async H6.loggingStreamWrapper (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:800:31296)
+    at async gY.processStreamResponse (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2463:81)
+    at async file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2457:22044
+    at async kQ.run (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2463:3153)
+    at async nwe.sendMessageStream (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2796:511)
+================================================================================
+

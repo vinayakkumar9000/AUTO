@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Advanced Universal Form Detection Engine v1.0
+Advanced Universal Form Detection Engine v1.1
 Multi-context form discovery with iframe and Shadow DOM support
+ENHANCED: iframe interaction support, Shadow DOM pierce selectors
 Author: vinayakkumar9000
 """
 
@@ -120,7 +121,9 @@ class FieldCandidate:
         context: str,
         frame_path: List[str],
         attributes: Dict[str, str],
-        surrounding_text: str = ""
+        surrounding_text: str = "",
+        frame_context: Optional[Any] = None,
+        shadow_host_selector: Optional[str] = None
     ):
         self.locator = locator
         self.field_type = field_type
@@ -129,6 +132,8 @@ class FieldCandidate:
         self.frame_path = frame_path
         self.attributes = attributes
         self.surrounding_text = surrounding_text
+        self.frame_context = frame_context  # Store frame reference for iframe fields
+        self.shadow_host_selector = shadow_host_selector  # Store shadow host selector
     
     def __repr__(self):
         return f"FieldCandidate(type={self.field_type}, confidence={self.confidence}, context={self.context})"
@@ -166,9 +171,9 @@ class FormDetectionEngine:
         self.log("Scanning iframes...")
         await self._scan_iframes(self.page, [])
         
-        # Scan Shadow DOM trees
+        # Scan Shadow DOM trees using pierce selectors
         self.log("Scanning Shadow DOM...")
-        await self._scan_shadow_dom(self.page, [])
+        await self._scan_shadow_dom_pierce(self.page)
         
         # Sort by confidence (highest first)
         self.discovered_fields.sort(key=lambda x: x.confidence, reverse=True)
@@ -205,7 +210,8 @@ class FormDetectionEngine:
                             context=context_type,
                             frame_path=frame_path,
                             attributes=attributes,
-                            surrounding_text=surrounding_text
+                            surrounding_text=surrounding_text,
+                            frame_context=context if context_type == "iframe" else None
                         )
                         self.discovered_fields.append(candidate)
                         self.log(f"Found {field_type} field (confidence={confidence}, context={context_type})")
@@ -241,71 +247,60 @@ class FormDetectionEngine:
             if self.verbose:
                 print(f"[SCAN] Error scanning iframes: {e}")
     
-    async def _scan_shadow_dom(self, context: Page | Frame, parent_path: List[str]):
-        """Recursively scan Shadow DOM trees."""
+    async def _scan_shadow_dom_pierce(self, page: Page):
+        """Scan Shadow DOM using pierce selectors (Playwright's shadow DOM support)."""
         try:
-            # Find all elements with shadow roots
-            shadow_hosts = await context.locator('*').evaluate_all("""
-                elements => elements.filter(el => el.shadowRoot).map((el, i) => ({
-                    index: i,
-                    tagName: el.tagName
-                }))
-            """)
+            # Use pierce selector to find inputs in shadow DOM
+            # pierce selector automatically traverses shadow boundaries
+            shadow_inputs = await page.locator('pierce/input, pierce/select, pierce/textarea').all()
             
-            for host_info in shadow_hosts:
-                shadow_path = parent_path + [f"shadow_{host_info['index']}_{host_info['tagName']}"]
-                self.log(f"Found Shadow DOM: {' > '.join(shadow_path)}")
+            for inp in shadow_inputs:
+                try:
+                    # Check if already found in main scan
+                    # (pierce also finds regular DOM elements)
+                    if not await inp.is_visible():
+                        continue
+                    
+                    # Get attributes
+                    attributes = await self._get_element_attributes(inp)
+                    
+                    # Get surrounding text
+                    surrounding_text = await self._get_surrounding_text(inp)
+                    
+                    # Classify field
+                    field_type, confidence = self._classify_field(attributes, surrounding_text)
+                    
+                    if field_type and confidence > 50:
+                        # Check if this field was already found in main scan
+                        # by comparing attributes
+                        is_duplicate = any(
+                            f.attributes.get('name') == attributes.get('name') and
+                            f.attributes.get('id') == attributes.get('id') and
+                            f.context != "shadow"
+                            for f in self.discovered_fields
+                        )
+                        
+                        if not is_duplicate:
+                            candidate = FieldCandidate(
+                                locator=inp,
+                                field_type=field_type,
+                                confidence=confidence,
+                                context="shadow",
+                                frame_path=["shadow_dom"],
+                                attributes=attributes,
+                                surrounding_text=surrounding_text
+                            )
+                            self.discovered_fields.append(candidate)
+                            self.log(f"Found {field_type} field in Shadow DOM (confidence={confidence})")
                 
-                # Get shadow root and scan it
-                # Note: Playwright doesn't directly support shadow DOM traversal
-                # We need to use evaluate to access shadow DOM content
-                await self._scan_shadow_root(context, host_info['index'], shadow_path)
+                except Exception as e:
+                    if self.verbose:
+                        print(f"[SCAN] Error processing shadow DOM input: {e}")
+                    continue
         
         except Exception as e:
             if self.verbose:
                 print(f"[SCAN] Error scanning Shadow DOM: {e}")
-    
-    async def _scan_shadow_root(self, context: Page | Frame, host_index: int, shadow_path: List[str]):
-        """Scan inside a specific shadow root."""
-        try:
-            # Use JavaScript to access shadow DOM inputs
-            shadow_inputs = await context.evaluate(f"""
-                () => {{
-                    const hosts = Array.from(document.querySelectorAll('*')).filter(el => el.shadowRoot);
-                    const host = hosts[{host_index}];
-                    if (!host || !host.shadowRoot) return [];
-                    
-                    const inputs = host.shadowRoot.querySelectorAll('input, select, textarea');
-                    return Array.from(inputs).map(inp => {{
-                        const rect = inp.getBoundingClientRect();
-                        return {{
-                            visible: rect.width > 0 && rect.height > 0,
-                            name: inp.name || '',
-                            id: inp.id || '',
-                            type: inp.type || '',
-                            placeholder: inp.placeholder || '',
-                            ariaLabel: inp.getAttribute('aria-label') || '',
-                            autocomplete: inp.autocomplete || ''
-                        }};
-                    }});
-                }}
-            """)
-            
-            for inp_data in shadow_inputs:
-                if not inp_data['visible']:
-                    continue
-                
-                # Classify based on attributes
-                field_type, confidence = self._classify_field(inp_data, "")
-                
-                if field_type and confidence > 50:
-                    # Note: We can't return actual locators from shadow DOM easily
-                    # This is a limitation - we log it but can't interact directly
-                    self.log(f"Found {field_type} in Shadow DOM (confidence={confidence}) - Limited interaction")
-        
-        except Exception as e:
-            if self.verbose:
-                print(f"[SCAN] Error scanning shadow root: {e}")
     
     async def _get_element_attributes(self, element: Locator) -> Dict[str, str]:
         """Extract all relevant attributes from an element."""
@@ -399,14 +394,10 @@ class FormDetectionEngine:
         
         # Special handling for password vs confirm_password
         if 'password' in scores and 'confirm_password' in scores:
-            # If confirm_password score is >= password score, prefer confirm_password
-            # This ensures fields like "confirmPassword" are correctly identified
             if scores['confirm_password'] >= scores['password']:
                 return 'confirm_password', scores['confirm_password']
-            # Only return password if it has significantly higher score
             elif scores['password'] > scores['confirm_password'] + 10:
                 return 'password', scores['password']
-            # Default to confirm_password in ambiguous cases
             else:
                 return 'confirm_password', scores['confirm_password']
         
@@ -428,19 +419,34 @@ class FormDetectionEngine:
 
 
 # ============================================================================
-# FRAMEWORK-AWARE VALUE SETTER
+# FRAMEWORK-AWARE VALUE SETTER WITH IFRAME/SHADOW DOM SUPPORT
 # ============================================================================
 
-async def set_field_value(locator: Locator, value: str, verbose: bool = True) -> bool:
+async def set_field_value(
+    locator: Locator,
+    value: str,
+    verbose: bool = True,
+    frame_context: Optional[Frame] = None
+) -> bool:
     """
     Set field value with framework-aware fallback chain and robust validation.
+    Supports iframe and Shadow DOM fields.
     Tries multiple methods to ensure React/Vue/Angular state updates.
     Returns True if successful, False otherwise.
+    
+    Args:
+        locator: Playwright locator for the field
+        value: Value to set
+        verbose: Enable logging
+        frame_context: Optional frame context for iframe fields
     """
     
     def log(msg: str):
         if verbose:
             print(f"[FILL] {msg}")
+    
+    # If this is an iframe field, we already have the correct locator from that frame
+    # No need to switch contexts - the locator is already bound to the frame
     
     # Escape value for JavaScript to prevent injection issues
     escaped_value = value.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "\\r")

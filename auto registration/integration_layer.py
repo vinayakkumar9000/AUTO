@@ -100,7 +100,12 @@ class UnifiedFormFiller:
         
         if email_field:
             self.log(f"Filling email field (confidence={email_field.confidence})...")
-            success = await set_field_value(email_field.locator, email, self.verbose)
+            success = await set_field_value(
+                email_field.locator, 
+                email, 
+                self.verbose,
+                frame_context=email_field.frame_context
+            )
             
             # Validate the value was set correctly
             if success:
@@ -109,7 +114,7 @@ class UnifiedFormFiller:
                     if actual_value != email:
                         self.log(f"Email validation failed, retrying... (expected: {email}, got: {actual_value})")
                         await email_field.locator.clear()
-                        success = await set_field_value(email_field.locator, email, self.verbose)
+                        success = await set_field_value(email_field.locator, email, self.verbose, frame_context=email_field.frame_context)
                 except:
                     pass
             
@@ -131,7 +136,7 @@ class UnifiedFormFiller:
             if password_fields:
                 success = False
                 for attempt in range(3):
-                    success = await set_field_value(password_fields[0].locator, password, self.verbose)
+                    success = await set_field_value(password_fields[0].locator, password, self.verbose, frame_context=password_fields[0].frame_context)
                     if success:
                         break
                     self.log(f"Password fill attempt {attempt + 1} failed, retrying...")
@@ -142,7 +147,7 @@ class UnifiedFormFiller:
             if confirm_fields:
                 success = False
                 for attempt in range(3):
-                    success = await set_field_value(confirm_fields[0].locator, password, self.verbose)
+                    success = await set_field_value(confirm_fields[0].locator, password, self.verbose, frame_context=confirm_fields[0].frame_context)
                     if success:
                         break
                     self.log(f"Confirm password fill attempt {attempt + 1} failed, retrying...")
@@ -162,7 +167,7 @@ class UnifiedFormFiller:
             )
             self.log(f"Generated username: {username}")
             
-            success = await set_field_value(username_fields[0].locator, username, self.verbose)
+            success = await set_field_value(username_fields[0].locator, username, self.verbose, frame_context=username_fields[0].frame_context)
             self.filled_fields["username"] = success
         else:
             self.log("No username fields found")

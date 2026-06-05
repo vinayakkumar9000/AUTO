@@ -32,6 +32,7 @@ class Identity:
     age: int
     state: str
     city: str
+    phone: str
     father_name: str
     mother_name: str
     email_local_part: str
@@ -217,6 +218,14 @@ def generate_parents(last_name: str, region_data: Dict) -> tuple:
     return father_name, mother_name
 
 
+def generate_phone() -> str:
+    """Generate a realistic Indian phone number."""
+    # Indian mobile numbers: +91 followed by 10 digits starting with 6-9
+    first_digit = random.choice(['6', '7', '8', '9'])
+    remaining_digits = ''.join([str(random.randint(0, 9)) for _ in range(9)])
+    return f"+91 {first_digit}{remaining_digits}"
+
+
 # ============================================================================
 # MAIN GENERATION FUNCTIONS
 # ============================================================================
@@ -267,6 +276,8 @@ def generate_identity(
     
     father_name, mother_name = generate_parents(last_name, region_data)
     
+    phone = generate_phone()
+    
     # Create identity
     identity = Identity(
         first_name=first_name,
@@ -279,6 +290,7 @@ def generate_identity(
         age=age,
         state=state,
         city=city,
+        phone=phone,
         father_name=father_name,
         mother_name=mother_name,
         email_local_part=email_local_part,
