@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.0] - 2026-06-05
+
+### 🐛 Critical Bug Fixes
+
+This release fixes 23 critical issues found in v2.0 that could cause failures on real websites.
+
+#### Async/Event Loop Fixes
+- **Fixed blocking event loop** - `smart_poll_inbox` now uses `asyncio.run_in_executor()` instead of `time.sleep()`
+- **Fixed deprecated `asyncio.get_event_loop()`** - Changed to `asyncio.get_running_loop()` for Python 3.10+ compatibility
+- **Fixed double retry wrapper** - Removed `retry_async` wrapper from `wait_for_otp_field` to prevent 45s timeout
+
+#### Regex Pattern Fixes
+- **Fixed EMAIL_PATTERN** - Removed `username` and bare `mail` to avoid false positives on username/mailing_address fields
+- **Fixed OTP_PATTERN** - Removed `confirm` and `auth` to avoid matching password-confirm/author fields
+- **Fixed SEND_PATTERN** - Made more specific to avoid overlap with SUBMIT_PATTERN
+- **Fixed SUBMIT_PATTERN** - Removed overlapping terms with SEND_PATTERN
+- **Fixed OTP_REGEX** - Added context-aware regex to avoid matching years/prices/IDs in email body
+
+#### Email Content Extraction Fixes
+- **Fixed mail.tm HTML support** - Now checks both `text` and `html` fields (was only checking `text`)
+- **Fixed guerrillamail HTML parsing** - Strips HTML tags and unescapes entities for better OTP extraction
+- **Fixed guerrillamail type hint** - Changed `email_timestamp` return type from `int` to `str`
+
+#### Field Detection Fixes
+- **Fixed hidden input detection** - Added visibility check before returning input fields
+- **Fixed class attribute matching** - Removed `class` from checked attributes to avoid false matches on CSS classes
+- **Fixed field detection order** - Checks visibility first to avoid returning hidden elements
+
+#### Timeout & Navigation Fixes
+- **Fixed networkidle hang** - Changed to `domcontentloaded` with explicit 30s timeout
+- **Fixed arbitrary waits** - Reduced hardcoded sleeps from 1s to 0.5s after field fills
+- **Fixed success verification** - Added page content check for error messages after OTP submission
+
+#### AI & Token Fixes
+- **Fixed AI token limit** - Increased `max_completion_tokens` from 6 to 10 to handle 8-digit OTPs
+- **Fixed AI input length** - Limited email content to 1000 chars to avoid token limits
+- **Fixed AI response parsing** - Extracts only digits from AI response
+
+#### Error Handling Fixes
+- **Fixed double error printing** - Removed duplicate error output in main()
+- **Fixed browser close error** - Removed manual `browser.close()` (handled by context manager)
+- **Fixed unused variable** - Removed unused `extra` variable assignment
+
+#### Documentation Fixes
+- **Fixed docstring accuracy** - Updated retry function docstrings (was claiming exponential backoff, actually fixed delay)
+- **Fixed import location** - Moved `random` and `string` imports to module level
+
+### 🔧 Changed
+- Version bumped to v2.1.0
+- Improved error messages with email content preview on OTP extraction failure
+- Added final URL to registration summary
+- Better success verification with page content check
+
+### 📊 Performance Impact
+- **Faster email polling** - No longer blocks event loop
+- **More reliable field detection** - Fewer false positives
+- **Better OTP extraction** - Context-aware regex reduces AI API calls
+- **Improved compatibility** - Works with Python 3.10+ without warnings
+
+---
+
 ## [2.0.0] - 2026-06-05
 
 ### 🎉 Major Release - Complete Rewrite

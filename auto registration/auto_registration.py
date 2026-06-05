@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Auto Registration Workflow v2.0
+Auto Registration Workflow v2.1
 Universal, robust, and lightweight automation for registration forms
 Author: vinayakkumar9000
 """
@@ -9,7 +9,8 @@ import asyncio
 import json
 import re
 import sys
-import time
+import random
+import string
 from pathlib import Path
 from typing import Optional, Tuple, Callable, Any
 
@@ -29,14 +30,25 @@ console = Console()
 CONFIG_FILE = Path(__file__).parent / "config.json"
 
 # ============================================================================
-# UNIVERSAL REGEX PATTERNS
+# UNIVERSAL REGEX PATTERNS (FIXED)
 # ============================================================================
 
-EMAIL_PATTERN = re.compile(r'(email|e[\-_]?mail|mail|user[\-_]?name)', re.IGNORECASE)
-OTP_PATTERN = re.compile(r'(otp|code|verif|token|pin|confirm|auth|2fa|mfa|one[\-_]?time)', re.IGNORECASE)
-SEND_PATTERN = re.compile(r'(send|get|request|resend|generate)[\s\-_]*(code|otp|pin|verify|email)', re.IGNORECASE)
-SUBMIT_PATTERN = re.compile(r'(submit|verify|confirm|continue|next|proceed|validate|done|finish)', re.IGNORECASE)
-OTP_REGEX = re.compile(r'\b(\d{4,8})\b')
+# Fixed: Removed 'username' and bare 'mail' to avoid false positives
+EMAIL_PATTERN = re.compile(r'(email|e[\-_]?mail)', re.IGNORECASE)
+
+# Fixed: Removed 'confirm' and 'auth' to avoid matching password/author fields
+OTP_PATTERN = re.compile(r'(otp|code|verif|token|pin|2fa|mfa|one[\-_]?time)', re.IGNORECASE)
+
+# Fixed: More specific patterns to avoid overlap with SUBMIT_PATTERN
+SEND_PATTERN = re.compile(r'(send|get|request|resend|generate)[\s\-_]*(code|otp|pin|verif)', re.IGNORECASE)
+
+# Fixed: Removed overlapping terms with SEND_PATTERN
+SUBMIT_PATTERN = re.compile(r'(submit|validate|done|finish|complete)', re.IGNORECASE)
+
+# Fixed: More specific OTP regex to avoid matching years, prices, IDs
+# Looks for 4-8 digits with specific context words nearby
+OTP_CONTEXT_REGEX = re.compile(r'(?:code|otp|verif|pin|token)[\s\S]{0,50}?(\d{4,8})', re.IGNORECASE)
+OTP_FALLBACK_REGEX = re.compile(r'\b(\d{6})\b')  # Fallback: prefer 6-digit codes
 
 # ============================================================================
 # CONFIGURATION MANAGEMENT
@@ -75,11 +87,11 @@ def get_api_key() -> str:
     return api_key
 
 # ============================================================================
-# RETRY HELPERS
+# RETRY HELPERS (FIXED)
 # ============================================================================
 
 async def retry_async(fn: Callable, retries: int = 3, delay: float = 1.5, label: str = "step") -> Any:
-    """Retry async function with exponential backoff."""
+    """Retry async function with fixed delay."""
     for attempt in range(retries):
         try:
             return await fn()
@@ -90,7 +102,7 @@ async def retry_async(fn: Callable, retries: int = 3, delay: float = 1.5, label:
             await asyncio.sleep(delay)
 
 def retry_sync(fn: Callable, retries: int = 3, delay: float = 1.5, label: str = "step") -> Any:
-    """Retry sync function with exponential backoff."""
+    """Retry sync function with fixed delay."""
     for attempt in range(retries):
         try:
             return fn()
@@ -101,14 +113,16 @@ def retry_sync(fn: Callable, retries: int = 3, delay: float = 1.5, label: str = 
             time.sleep(delay)
 
 # ============================================================================
-# EMAIL PROVIDER: MAIL.TM
+# HELPER FUNCTIONS
 # ============================================================================
 
 def _rand_string(length: int) -> str:
     """Generate random string."""
-    import random
-    import string
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
+
+# ============================================================================
+# EMAIL PROVIDER: MAIL.TM (FIXED)
+# ============================================================================
 
 def generate_mailtm_email() -> Tuple[str, str, str]:
     """Generate mail.tm email. Returns: (email, password, auth_token)"""
@@ -132,7 +146,7 @@ def generate_mailtm_email() -> Tuple[str, str, str]:
     return address, password, auth
 
 def check_mailtm_inbox(auth_token: str) -> Optional[str]:
-    """Check mail.tm inbox once. Returns email content or None."""
+    """Check mail.tm inbox once. Returns email content (text or html) or None."""
     BASE = "https://api.mail.tm"
     headers = {"Authorization": f"Bearer {auth_token}"}
     
@@ -144,22 +158,25 @@ def check_mailtm_inbox(auth_token: str) -> Optional[str]:
         message_id = messages[0]["id"]
         full_res = requests.get(f"{BASE}/messages/{message_id}", headers=headers, timeout=15)
         full_res.raise_for_status()
-        return full_res.json().get("text", "")
+        data = full_res.json()
+        # Fixed: Check both text and html fields
+        return data.get("text") or data.get("html") or ""
     return None
 
 # ============================================================================
-# EMAIL PROVIDER: GUERRILLAMAIL
+# EMAIL PROVIDER: GUERRILLAMAIL (FIXED)
 # ============================================================================
 
 def generate_guerrillamail_email() -> Tuple[str, str, str]:
-    """Generate guerrillamail email. Returns: (email, sid_token, email_timestamp)"""
+    """Generate guerrillamail email. Returns: (email, sid_token, email_timestamp_str)"""
     BASE = "https://api.guerrillamail.com/ajax.php"
     
     response = requests.get(BASE, params={"f": "get_email_address"}, timeout=15)
     response.raise_for_status()
     data = response.json()
     
-    return data["email_addr"], data["sid_token"], data["email_timestamp"]
+    # Fixed: Convert timestamp to string for consistent type
+    return data["email_addr"], data["sid_token"], str(data["email_timestamp"])
 
 def check_guerrillamail_inbox(sid_token: str, email_timestamp: str) -> Optional[str]:
     """Check guerrillamail inbox once. Returns email content or None."""
@@ -173,7 +190,11 @@ def check_guerrillamail_inbox(sid_token: str, email_timestamp: str) -> Optional[
         email_id = data["list"][0]["mail_id"]
         full_response = requests.get(BASE, params={"f": "fetch_email", "sid_token": sid_token, "email_id": email_id}, timeout=15)
         full_response.raise_for_status()
-        return full_response.json().get("mail_body", "")
+        mail_body = full_response.json().get("mail_body", "")
+        # Fixed: Strip HTML tags for better OTP extraction
+        import html
+        clean_body = html.unescape(re.sub(r'<[^>]+>', ' ', mail_body))
+        return clean_body
     return None
 
 # ============================================================================
@@ -200,23 +221,31 @@ def generate_email_with_fallback() -> Tuple[str, str, str, str]:
         except Exception as e2:
             raise Exception(f"All email providers failed. mail.tm: {e}, guerrillamail: {e2}")
 
-def smart_poll_inbox(provider: str, auth_data: str, timeout: int = 60) -> Optional[str]:
+async def smart_poll_inbox_async(provider: str, auth_data: str, timeout: int = 60) -> Optional[str]:
     """
+    Fixed: Async polling that doesn't block event loop.
     Smart polling: check every 2 seconds, stop immediately when email arrives.
     Returns email content or None.
     """
-    start_time = time.time()
-    elapsed = 0
+    start_time = asyncio.get_running_loop().time()
     
-    while elapsed < timeout:
+    while True:
+        elapsed = asyncio.get_running_loop().time() - start_time
+        
+        if elapsed >= timeout:
+            console.print(f"[red]✗[/red] No email after {timeout}s" + " " * 20)
+            return None
+        
         try:
             console.print(f"[dim]Checking inbox... ({int(elapsed)}s elapsed)[/dim]", end="\r")
             
+            # Run sync email check in executor to avoid blocking
+            loop = asyncio.get_running_loop()
             if provider == "mail.tm":
-                content = check_mailtm_inbox(auth_data)
+                content = await loop.run_in_executor(None, check_mailtm_inbox, auth_data)
             elif provider == "guerrillamail":
                 sid, timestamp = auth_data.split("|")
-                content = check_guerrillamail_inbox(sid, timestamp)
+                content = await loop.run_in_executor(None, check_guerrillamail_inbox, sid, timestamp)
             else:
                 return None
             
@@ -224,32 +253,27 @@ def smart_poll_inbox(provider: str, auth_data: str, timeout: int = 60) -> Option
                 console.print(f"[green]✓[/green] Email received after {int(elapsed)}s" + " " * 20)
                 return content
             
-            time.sleep(2)
-            elapsed = time.time() - start_time
+            await asyncio.sleep(2)
         except Exception:
-            time.sleep(2)
-            elapsed = time.time() - start_time
-    
-    console.print(f"[red]✗[/red] No email after {timeout}s" + " " * 20)
-    return None
+            await asyncio.sleep(2)
 
 # ============================================================================
-# OTP EXTRACTION: REGEX FIRST, AI FALLBACK
+# OTP EXTRACTION: REGEX FIRST, AI FALLBACK (FIXED)
 # ============================================================================
 
 def extract_otp_regex(email_content: str) -> Optional[str]:
-    """Extract OTP using regex. Prefer 6-digit, then any 4-8 digit."""
-    matches = OTP_REGEX.findall(email_content)
-    if not matches:
-        return None
+    """Extract OTP using improved regex with context awareness."""
+    # Try context-aware regex first
+    context_match = OTP_CONTEXT_REGEX.search(email_content)
+    if context_match:
+        return context_match.group(1)
     
-    # Prefer 6-digit codes
-    six_digit = [m for m in matches if len(m) == 6]
-    if six_digit:
-        return six_digit[0]
+    # Fallback to 6-digit codes
+    fallback_match = OTP_FALLBACK_REGEX.search(email_content)
+    if fallback_match:
+        return fallback_match.group(1)
     
-    # Return first 4-8 digit match
-    return matches[0]
+    return None
 
 def extract_otp_ai(email_content: str, api_key: str) -> Optional[str]:
     """Extract OTP using FreeModel AI API."""
@@ -258,10 +282,10 @@ def extract_otp_ai(email_content: str, api_key: str) -> Optional[str]:
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     payload = {
         "model": "gpt-5.4-mini",
-        "max_completion_tokens": 6,
+        "max_completion_tokens": 10,  # Fixed: Increased from 6 to handle 8-digit OTPs
         "messages": [
-            {"role": "system", "content": "Extract the OTP from the user's message. Return only the verification code digits. Output must contain digits only, no spaces, no punctuation, no labels, no explanations, no markdown, no quotes, and no extra characters. If multiple numbers exist, return only the number intended for authentication."},
-            {"role": "user", "content": email_content}
+            {"role": "system", "content": "Extract the OTP verification code from the email. Return only the digits of the verification code, nothing else. No spaces, no punctuation, no labels, no explanations."},
+            {"role": "user", "content": email_content[:1000]}  # Limit content to avoid token limits
         ]
     }
     
@@ -269,7 +293,9 @@ def extract_otp_ai(email_content: str, api_key: str) -> Optional[str]:
     response.raise_for_status()
     otp = response.json()["choices"][0]["message"]["content"].strip()
     
-    return otp if otp.isdigit() else None
+    # Extract only digits from response
+    otp_digits = re.sub(r'\D', '', otp)
+    return otp_digits if otp_digits and 4 <= len(otp_digits) <= 8 else None
 
 def extract_otp(email_content: str, api_key: str) -> Optional[str]:
     """Extract OTP: try regex first, fallback to AI."""
@@ -288,7 +314,7 @@ def extract_otp(email_content: str, api_key: str) -> Optional[str]:
     return None
 
 # ============================================================================
-# UNIVERSAL FIELD DETECTION
+# UNIVERSAL FIELD DETECTION (FIXED)
 # ============================================================================
 
 async def find_input_by_pattern(page: Page, pattern: re.Pattern, field_type: str) -> Optional[Any]:
@@ -298,8 +324,12 @@ async def find_input_by_pattern(page: Page, pattern: re.Pattern, field_type: str
     
     for inp in inputs:
         try:
-            # Check all attributes
-            attrs_to_check = ['name', 'id', 'placeholder', 'aria-label', 'autocomplete', 'class', 'type']
+            # Fixed: Check visibility first
+            if not await inp.is_visible():
+                continue
+            
+            # Fixed: Don't check 'class' attribute to avoid false matches
+            attrs_to_check = ['name', 'id', 'placeholder', 'aria-label', 'autocomplete', 'type']
             for attr in attrs_to_check:
                 value = await inp.get_attribute(attr)
                 if value and pattern.search(value):
@@ -350,14 +380,17 @@ async def find_button_by_pattern(page: Page, pattern: re.Pattern, button_type: s
     raise Exception(f"{button_type} button not found")
 
 # ============================================================================
-# MULTI-STEP FORM SUPPORT
+# MULTI-STEP FORM SUPPORT (FIXED)
 # ============================================================================
 
 async def wait_for_otp_field(page: Page, timeout: int = 15) -> Any:
-    """Poll for OTP field appearance (multi-step form support)."""
-    deadline = asyncio.get_event_loop().time() + timeout
+    """
+    Fixed: Removed retry_async wrapper to avoid 45s timeout.
+    Poll for OTP field appearance (multi-step form support).
+    """
+    deadline = asyncio.get_running_loop().time() + timeout
     
-    while asyncio.get_event_loop().time() < deadline:
+    while asyncio.get_running_loop().time() < deadline:
         try:
             otp_field = await find_input_by_pattern(page, OTP_PATTERN, "OTP")
             if otp_field:
@@ -369,12 +402,13 @@ async def wait_for_otp_field(page: Page, timeout: int = 15) -> Any:
     raise Exception("OTP field did not appear within timeout")
 
 # ============================================================================
-# MAIN AUTOMATION WORKFLOW
+# MAIN AUTOMATION WORKFLOW (FIXED)
 # ============================================================================
 
 async def run_automation(url: str, api_key: str) -> None:
     """Main automation workflow with fresh browser context."""
     browser: Optional[Browser] = None
+    context = None
     
     try:
         # Step 1: Generate Identity
@@ -391,7 +425,7 @@ async def run_automation(url: str, api_key: str) -> None:
         
         # Step 2: Generate Email with Fallback
         console.print("\n[bold cyan]═══ Step 2: Generate Email ═══[/bold cyan]")
-        email, auth_data, provider, extra = generate_email_with_fallback()
+        email, auth_data, provider, _ = generate_email_with_fallback()
         
         # Step 3: Launch Browser
         console.print("\n[bold cyan]═══ Step 3: Launch Browser ═══[/bold cyan]")
@@ -400,9 +434,12 @@ async def run_automation(url: str, api_key: str) -> None:
             context = await browser.new_context()  # Fresh context
             page = await context.new_page()
             
-            # Step 4: Navigate to URL
+            # Step 4: Navigate to URL (Fixed: Added explicit timeout)
             console.print(f"[cyan]Navigating to {url}...[/cyan]")
-            await retry_async(lambda: page.goto(url, wait_until="networkidle"), label="page load")
+            await retry_async(
+                lambda: page.goto(url, wait_until="domcontentloaded", timeout=30000),
+                label="page load"
+            )
             console.print("[green]✓[/green] Page loaded")
             
             # Step 5: Find and Fill Email Field
@@ -414,7 +451,7 @@ async def run_automation(url: str, api_key: str) -> None:
             await email_field.fill(email)
             console.print(f"[green]✓[/green] Email entered: {email}")
             
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
             
             # Step 6: Click Send Code Button
             console.print("\n[bold cyan]═══ Step 5: Send Code ═══[/bold cyan]")
@@ -425,9 +462,12 @@ async def run_automation(url: str, api_key: str) -> None:
             await send_button.click()
             console.print("[green]✓[/green] Send Code clicked")
             
-            # Step 7: Wait for Email (Smart Polling)
+            # Fixed: Wait for potential page navigation
+            await asyncio.sleep(2)
+            
+            # Step 7: Wait for Email (Smart Polling - Fixed: Now async)
             console.print("\n[bold cyan]═══ Step 6: Wait for Email ═══[/bold cyan]")
-            email_content = smart_poll_inbox(provider, auth_data, timeout=60)
+            email_content = await smart_poll_inbox_async(provider, auth_data, timeout=60)
             
             if not email_content:
                 raise Exception("No email received within 60 seconds")
@@ -437,18 +477,16 @@ async def run_automation(url: str, api_key: str) -> None:
             otp = extract_otp(email_content, api_key)
             
             if not otp:
+                console.print(f"[yellow]Email content preview:[/yellow] {email_content[:200]}")
                 raise Exception("Failed to extract OTP from email")
             
-            # Step 9: Wait for OTP Field (Multi-Step Support)
+            # Step 9: Wait for OTP Field (Multi-Step Support - Fixed: No double retry)
             console.print("\n[bold cyan]═══ Step 8: Enter OTP ═══[/bold cyan]")
-            otp_field = await retry_async(
-                lambda: wait_for_otp_field(page, timeout=15),
-                label="OTP field find"
-            )
+            otp_field = await wait_for_otp_field(page, timeout=15)
             await otp_field.fill(otp)
             console.print(f"[green]✓[/green] OTP entered: {otp}")
             
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
             
             # Step 10: Submit OTP
             submit_button = await retry_async(
@@ -458,7 +496,16 @@ async def run_automation(url: str, api_key: str) -> None:
             await submit_button.click()
             console.print("[green]✓[/green] OTP submitted")
             
+            # Fixed: Wait and verify success
             await asyncio.sleep(3)
+            
+            # Check if still on same page or error message
+            current_url = page.url
+            page_content = await page.content()
+            
+            # Simple success check
+            if "error" in page_content.lower() or "invalid" in page_content.lower():
+                console.print("[yellow]⚠ Warning: Possible error on page, please verify manually[/yellow]")
             
             # Success Summary
             console.print("\n[bold green]═══════════════════════════════════[/bold green]")
@@ -470,7 +517,8 @@ async def run_automation(url: str, api_key: str) -> None:
                 f"[bold]Email:[/bold] {email}\n"
                 f"[bold]Provider:[/bold] {provider}\n"
                 f"[bold]Identity:[/bold] {identity.full_name}\n"
-                f"[bold]OTP:[/bold] {otp}",
+                f"[bold]OTP:[/bold] {otp}\n"
+                f"[bold]Final URL:[/bold] {current_url}",
                 title="📋 Registration Summary",
                 border_style="green"
             ))
@@ -479,8 +527,8 @@ async def run_automation(url: str, api_key: str) -> None:
         console.print(f"\n[red]✗ Error:[/red] {e}")
         raise
     finally:
-        if browser:
-            await browser.close()
+        # Fixed: Removed manual browser.close() - handled by context manager
+        pass
 
 # ============================================================================
 # CLI INTERFACE
@@ -489,7 +537,7 @@ async def run_automation(url: str, api_key: str) -> None:
 def main():
     """Main CLI entry point."""
     console.print("\n[bold cyan]╔═══════════════════════════════════════╗[/bold cyan]")
-    console.print("[bold cyan]║   Auto Registration Workflow v2.0    ║[/bold cyan]")
+    console.print("[bold cyan]║   Auto Registration Workflow v2.1    ║[/bold cyan]")
     console.print("[bold cyan]╚═══════════════════════════════════════╝[/bold cyan]\n")
     
     # Get URL
@@ -506,13 +554,15 @@ def main():
     api_key = get_api_key()
     
     # Run automation
-    asyncio.run(run_automation(url, api_key))
+    try:
+        asyncio.run(run_automation(url, api_key))
+    except Exception as e:
+        console.print(f"\n[red]✗ Registration failed:[/red] {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
         console.print("\n[yellow]⚠ Aborted by user[/yellow]")
-    except Exception as e:
-        console.print(f"\n[red]✗ Fatal error:[/red] {e}")
-        sys.exit(1)
+        sys.exit(130)
