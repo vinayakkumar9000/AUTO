@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.4] - 2026-06-05
+
+### 📝 Documentation Updates
+- Updated README.md version references from 2.0 to 2.1.4
+- Updated version in header, footer, and changelog sections
+- Synchronized version numbering across all documentation
+
+---
+
 ## [2.1.0] - 2026-06-05
 
 ### 🐛 Critical Bug Fixes
