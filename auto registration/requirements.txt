@@ -1,0 +1,11 @@
+# Auto Registration Workflow Dependencies
+
+# Core dependencies
+requests>=2.31.0
+rich>=13.7.0
+
+# Playwright for browser automation
+playwright>=1.40.0
+
+# Note: After installing requirements, run:
+# playwright install chromium
