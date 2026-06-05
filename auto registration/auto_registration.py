@@ -6,9 +6,11 @@ Author: vinayakkumar9000
 """
 
 import asyncio
+import html
 import json
 import re
 import sys
+import time
 import random
 import string
 from pathlib import Path
@@ -37,17 +39,16 @@ CONFIG_FILE = Path(__file__).parent / "config.json"
 EMAIL_PATTERN = re.compile(r'(email|e[\-_]?mail)', re.IGNORECASE)
 
 # Fixed: Removed 'confirm' and 'auth' to avoid matching password/author fields
-OTP_PATTERN = re.compile(r'(otp|code|verif|token|pin|2fa|mfa|one[\-_]?time)', re.IGNORECASE)
+OTP_PATTERN = re.compile(r'(otp|code|verif|pin|2fa|mfa|one[\-_]?time)', re.IGNORECASE)
 
 # Fixed: More specific patterns to avoid overlap with SUBMIT_PATTERN
 SEND_PATTERN = re.compile(r'(send|get|request|resend|generate)[\s\-_]*(code|otp|pin|verif)', re.IGNORECASE)
 
-# Fixed: Removed overlapping terms with SEND_PATTERN
-SUBMIT_PATTERN = re.compile(r'(submit|validate|done|finish|complete)', re.IGNORECASE)
+# Fixed: Restored common submit terms while avoiding SEND overlap
+SUBMIT_PATTERN = re.compile(r'(submit|verify|confirm|continue|next|proceed|validate|done|finish|complete)', re.IGNORECASE)
 
-# Fixed: More specific OTP regex to avoid matching years, prices, IDs
-# Looks for 4-8 digits with specific context words nearby
-OTP_CONTEXT_REGEX = re.compile(r'(?:code|otp|verif|pin|token)[\s\S]{0,50}?(\d{4,8})', re.IGNORECASE)
+# Fixed: Bidirectional OTP regex - matches both "code: 123456" and "123456 is your code"
+OTP_CONTEXT_REGEX = re.compile(r'(?:(?:code|otp|verif|pin)[\s\S]{0,50}?(\d{4,8})|(\d{4,8})[\s\S]{0,50}?(?:code|otp|verif|pin))', re.IGNORECASE)
 OTP_FALLBACK_REGEX = re.compile(r'\b(\d{6})\b')  # Fallback: prefer 6-digit codes
 
 # ============================================================================
@@ -192,7 +193,6 @@ def check_guerrillamail_inbox(sid_token: str, email_timestamp: str) -> Optional[
         full_response.raise_for_status()
         mail_body = full_response.json().get("mail_body", "")
         # Fixed: Strip HTML tags for better OTP extraction
-        import html
         clean_body = html.unescape(re.sub(r'<[^>]+>', ' ', mail_body))
         return clean_body
     return None
@@ -262,11 +262,12 @@ async def smart_poll_inbox_async(provider: str, auth_data: str, timeout: int = 6
 # ============================================================================
 
 def extract_otp_regex(email_content: str) -> Optional[str]:
-    """Extract OTP using improved regex with context awareness."""
-    # Try context-aware regex first
+    """Extract OTP using improved regex with bidirectional context awareness."""
+    # Try context-aware regex first (bidirectional)
     context_match = OTP_CONTEXT_REGEX.search(email_content)
     if context_match:
-        return context_match.group(1)
+        # Return whichever group matched (group 1 or 2)
+        return context_match.group(1) or context_match.group(2)
     
     # Fallback to 6-digit codes
     fallback_match = OTP_FALLBACK_REGEX.search(email_content)
@@ -407,9 +408,6 @@ async def wait_for_otp_field(page: Page, timeout: int = 15) -> Any:
 
 async def run_automation(url: str, api_key: str) -> None:
     """Main automation workflow with fresh browser context."""
-    browser: Optional[Browser] = None
-    context = None
-    
     try:
         # Step 1: Generate Identity
         console.print("\n[bold cyan]═══ Step 1: Generate Identity ═══[/bold cyan]")
@@ -496,16 +494,11 @@ async def run_automation(url: str, api_key: str) -> None:
             await submit_button.click()
             console.print("[green]✓[/green] OTP submitted")
             
-            # Fixed: Wait and verify success
+            # Fixed: Wait for potential redirect/success page
             await asyncio.sleep(3)
             
-            # Check if still on same page or error message
+            # Get final URL for summary
             current_url = page.url
-            page_content = await page.content()
-            
-            # Simple success check
-            if "error" in page_content.lower() or "invalid" in page_content.lower():
-                console.print("[yellow]⚠ Warning: Possible error on page, please verify manually[/yellow]")
             
             # Success Summary
             console.print("\n[bold green]═══════════════════════════════════[/bold green]")
@@ -526,9 +519,6 @@ async def run_automation(url: str, api_key: str) -> None:
     except Exception as e:
         console.print(f"\n[red]✗ Error:[/red] {e}")
         raise
-    finally:
-        # Fixed: Removed manual browser.close() - handled by context manager
-        pass
 
 # ============================================================================
 # CLI INTERFACE
@@ -556,8 +546,8 @@ def main():
     # Run automation
     try:
         asyncio.run(run_automation(url, api_key))
-    except Exception as e:
-        console.print(f"\n[red]✗ Registration failed:[/red] {e}")
+    except Exception:
+        # Error already printed in run_automation
         sys.exit(1)
 
 if __name__ == "__main__":
