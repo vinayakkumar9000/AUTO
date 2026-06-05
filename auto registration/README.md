@@ -10,7 +10,7 @@
 [![Playwright](https://img.shields.io/badge/Playwright-Async-green.svg)](https://playwright.dev/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Author:** vinayakkumar9000 | **Version:** 2.0
+**Author:** vinayakkumar9000 | **Version:** 2.1.4
 
 </div>
 
@@ -492,7 +492,7 @@ Need help? Have questions?
 
 **Made with ❤️ by vinayakkumar9000**
 
-**Version 2.0** | **2026**
+**Version 2.1.4** | **2026**
 
 </div>
 
@@ -500,7 +500,7 @@ Need help? Have questions?
 
 ## 📝 Changelog
 
-### v2.0 (Current)
+### v2.1.4 (Current)
 - ✨ Universal regex-based field detection
 - 🧠 Regex-first OTP extraction with AI fallback
 - 📧 Multi-provider email fallback (mail.tm → guerrillamail)
