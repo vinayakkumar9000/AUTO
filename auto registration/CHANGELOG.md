@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.1] - 2026-06-05
+
+### 🎉 Major Feature Release - Advanced Anti-Detection & Universal Support
+
+This release adds comprehensive anti-detection measures, magic link support, and enhanced form handling capabilities.
+
+#### 🎭 Anti-Detection Features
+- **Random User Agent Pool** - Rotates between 6 realistic Chrome user agents
+- **Random Viewport Sizes** - 5 common screen resolutions (1366x768 to 1920x1080)
+- **Human-like Typing** - Character-by-character with random 50-200ms delays
+- **Bezier Curve Mouse Movement** - Natural mouse paths with 20-step curves
+- **Random Scrolling** - Scroll before actions with random amounts (100-500px)
+- **Enhanced Browser Fingerprint** - Spoofs plugins, languages, platform, hardware
+- **Random Delays** - 800-3000ms pauses between actions
+
+#### 🔗 Magic Link Support
+- **Automatic Detection** - Identifies magic link vs OTP verification
+- **Smart Navigation** - Opens magic link in same browser context
+- **URL Change Verification** - Confirms successful verification
+- **Bidirectional Regex** - `MAGIC_LINK_REGEX` for link extraction
+
+#### 📝 Enhanced Form Auto-Fill
+- **Password Generation** - Secure 12-char passwords with mixed characters
+- **Name Fields** - Supports full name, first name, last name patterns
+- **Phone Numbers** - Auto-fills from identity generator
+- **Date of Birth** - Handles both date input and text formats
+- **Password Confirmation** - Detects and fills confirm password fields
+
+#### 🔢 Split OTP Box Handler
+- **Automatic Detection** - Identifies split OTP input boxes (maxlength="1")
+- **Human-like Filling** - Types each digit with random delays
+- **Visibility Check** - Only fills visible boxes
+
+#### 📧 Enhanced Email Polling
+- **Sender Verification** - Validates email sender domain matches registration site
+- **Magic Link Priority** - Checks for magic link before OTP
+- **Better Error Logging** - Detailed polling error messages
+
+#### 🎯 Improved Regex Patterns
+- **Bidirectional OTP Regex** - Forward and reverse pattern matching
+- **Order Number Protection** - Avoids matching order numbers as OTPs
+- **Magic Link Pattern** - Comprehensive URL pattern for verification links
+- **Form Field Patterns** - Password, confirm password, name, phone, DOB
+
+#### 🔄 Smart Fallback Logic
+- **No Send Button Fallback** - Tries Submit button if Send Code not found
+- **Auto-Resend** - Detects and clicks resend button if no email after 30s
+- **Extended Timeout** - Additional 30s after resend attempt
+
+#### 🛡️ Security Enhancements
+- **Fresh Context Per Run** - No session/cookie persistence
+- **Headless Mode** - No GUI, reduced detection surface
+- **Anti-Automation Removal** - Removes webdriver property and automation indicators
+
+### 📊 Performance Improvements
+- **Parallel Initialization** - Identity, email, and browser launch in parallel
+- **Optimized Polling** - 2-second intervals with immediate stop
+- **Reduced Waits** - Smart delays instead of fixed sleeps
+
+### 🐛 Bug Fixes
+- All 23 critical bugs from v2.1.0 remain fixed
+- Additional stability improvements for edge cases
+
+---
+
 ## [2.1.4] - 2026-06-05
 
 ### 📝 Documentation Updates

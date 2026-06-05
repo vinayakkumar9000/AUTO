@@ -1,4 +1,4 @@
-# 🚀✨ Auto Registration Workflow v2.0 ⚡🔥
+# 🚀✨ Auto Registration Workflow v3.1 ⚡🔥
 
 <div align="center">
 
@@ -10,7 +10,7 @@
 [![Playwright](https://img.shields.io/badge/Playwright-Async-green.svg)](https://playwright.dev/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Author:** vinayakkumar9000 | **Version:** 2.1.4
+**Author:** vinayakkumar9000 | **Version:** 3.1
 
 </div>
 
@@ -492,7 +492,7 @@ Need help? Have questions?
 
 **Made with ❤️ by vinayakkumar9000**
 
-**Version 2.1.4** | **2026**
+**Version 3.1** | **2026**
 
 </div>
 
@@ -500,7 +500,7 @@ Need help? Have questions?
 
 ## 📝 Changelog
 
-### v2.1.4 (Current)
+### v3.1 (Current)
 - ✨ Universal regex-based field detection
 - 🧠 Regex-first OTP extraction with AI fallback
 - 📧 Multi-provider email fallback (mail.tm → guerrillamail)
