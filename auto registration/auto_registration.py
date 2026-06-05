@@ -38,17 +38,17 @@ CONFIG_FILE = Path(__file__).parent / "config.json"
 # Fixed: Removed 'username' and bare 'mail' to avoid false positives
 EMAIL_PATTERN = re.compile(r'(email|e[\-_]?mail)', re.IGNORECASE)
 
-# Fixed: Removed 'confirm' and 'auth' to avoid matching password/author fields
-OTP_PATTERN = re.compile(r'(otp|code|verif|pin|2fa|mfa|one[\-_]?time)', re.IGNORECASE)
+# Fixed: Removed 'confirm', 'auth', and 'pin' to avoid matching password/author/pincode fields
+OTP_PATTERN = re.compile(r'(otp|code|verif|2fa|mfa|one[\-_]?time)', re.IGNORECASE)
 
-# Fixed: More specific patterns to avoid overlap with SUBMIT_PATTERN
-SEND_PATTERN = re.compile(r'(send|get|request|resend|generate)[\s\-_]*(code|otp|pin|verif)', re.IGNORECASE)
+# Fixed: More specific patterns, includes 'email' on right side
+SEND_PATTERN = re.compile(r'(send|get|request|resend|generate)[\s\-_]*(code|otp|pin|verif|email)', re.IGNORECASE)
 
 # Fixed: Restored common submit terms while avoiding SEND overlap
 SUBMIT_PATTERN = re.compile(r'(submit|verify|confirm|continue|next|proceed|validate|done|finish|complete)', re.IGNORECASE)
 
-# Fixed: Bidirectional OTP regex - matches both "code: 123456" and "123456 is your code"
-OTP_CONTEXT_REGEX = re.compile(r'(?:(?:code|otp|verif|pin)[\s\S]{0,50}?(\d{4,8})|(\d{4,8})[\s\S]{0,50}?(?:code|otp|verif|pin))', re.IGNORECASE)
+# Fixed: Forward-only OTP regex to avoid matching order numbers before keywords
+OTP_CONTEXT_REGEX = re.compile(r'(?:code|otp|verif|pin)[\s\S]{0,50}?(\d{4,8})', re.IGNORECASE)
 OTP_FALLBACK_REGEX = re.compile(r'\b(\d{6})\b')  # Fallback: prefer 6-digit codes
 
 # ============================================================================
@@ -160,8 +160,11 @@ def check_mailtm_inbox(auth_token: str) -> Optional[str]:
         full_res = requests.get(f"{BASE}/messages/{message_id}", headers=headers, timeout=15)
         full_res.raise_for_status()
         data = full_res.json()
-        # Fixed: Check both text and html fields
-        return data.get("text") or data.get("html") or ""
+        # Fixed: Check both text and html fields, strip HTML if needed
+        content = data.get("text") or data.get("html") or ""
+        if content and "<" in content:  # Contains HTML tags
+            content = html.unescape(re.sub(r'<[^>]+>', ' ', content))
+        return content
     return None
 
 # ============================================================================
@@ -262,12 +265,11 @@ async def smart_poll_inbox_async(provider: str, auth_data: str, timeout: int = 6
 # ============================================================================
 
 def extract_otp_regex(email_content: str) -> Optional[str]:
-    """Extract OTP using improved regex with bidirectional context awareness."""
-    # Try context-aware regex first (bidirectional)
+    """Extract OTP using improved regex with context awareness."""
+    # Try context-aware regex first (forward-only to avoid wrong numbers)
     context_match = OTP_CONTEXT_REGEX.search(email_content)
     if context_match:
-        # Return whichever group matched (group 1 or 2)
-        return context_match.group(1) or context_match.group(2)
+        return context_match.group(1)
     
     # Fallback to 6-digit codes
     fallback_match = OTP_FALLBACK_REGEX.search(email_content)
@@ -361,6 +363,10 @@ async def find_button_by_pattern(page: Page, pattern: re.Pattern, button_type: s
                 if not await elem.is_visible():
                     continue
                 
+                # Fixed: Check if button is enabled
+                if not await elem.is_enabled():
+                    continue
+                
                 # Check inner text
                 text = await elem.inner_text()
                 if pattern.search(text):
@@ -451,17 +457,21 @@ async def run_automation(url: str, api_key: str) -> None:
             
             await asyncio.sleep(0.5)
             
-            # Step 6: Click Send Code Button
+            # Step 6: Click Send Code Button (or skip if not found)
             console.print("\n[bold cyan]═══ Step 5: Send Code ═══[/bold cyan]")
-            send_button = await retry_async(
-                lambda: find_button_by_pattern(page, SEND_PATTERN, "Send Code"),
-                label="send button find"
-            )
-            await send_button.click()
-            console.print("[green]✓[/green] Send Code clicked")
-            
-            # Fixed: Wait for potential page navigation
-            await asyncio.sleep(2)
+            try:
+                send_button = await retry_async(
+                    lambda: find_button_by_pattern(page, SEND_PATTERN, "Send Code"),
+                    label="send button find"
+                )
+                await send_button.click()
+                console.print("[green]✓[/green] Send Code clicked")
+                
+                # Fixed: Wait for potential page navigation
+                await asyncio.sleep(2)
+            except Exception:
+                console.print("[yellow]⚠[/yellow] No dedicated Send Code button found, assuming form auto-sends OTP")
+                await asyncio.sleep(1)
             
             # Step 7: Wait for Email (Smart Polling - Fixed: Now async)
             console.print("\n[bold cyan]═══ Step 6: Wait for Email ═══[/bold cyan]")
