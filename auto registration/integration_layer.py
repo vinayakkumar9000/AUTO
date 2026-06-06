@@ -1,423 +1,451 @@
 #!/usr/bin/env python3
 """
-Integration Layer v1.1
-Integrates advanced form detection with AI-powered fallbacks
+Integration Layer
+Bridge between multi-agent system and existing v4 registration system
 Author: vinayakkumar9000
 """
 
-# Standard library imports
 import asyncio
-from typing import Any, Dict, Optional
+import time
+from typing import Dict, List, Optional, Any, Callable
+from datetime import datetime
+from enum import Enum
+import logging
 
-# Third-party imports
-from playwright.async_api import Page
-
-# Local module imports
-from dynamic_form_support import DynamicFormHandler
-from field_handlers import (
-    CheckboxHandler,
-    DOBHandler,
-    DropdownHandler,
-    PasswordManager,
-    UsernameManager,
-)
-from form_detection_engine import FieldCandidate, FormDetectionEngine, set_field_value
-
-# AI integration (optional)
-try:
-    from ai_form_analyzer import AIFormHelper
-    AI_AVAILABLE = True
-except ImportError:
-    AI_AVAILABLE = False
-    AIFormHelper = None
-
+from agents.coordinator_agent import CoordinatorAgent
+from agents.base_agent import AgentContext, AgentStatus, create_agent_context
+from ai_model_router import ModelRouter
+from domain_intelligence import DomainIntelligence
 
 # ============================================================================
-# UNIFIED FORM FILLER
+# WORKFLOW STATE
 # ============================================================================
 
-class UnifiedFormFiller:
+class WorkflowState(Enum):
+    """Workflow execution states."""
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+    PARTIAL = "partial"
+    CANCELLED = "cancelled"
+
+# ============================================================================
+# INTEGRATION LAYER
+# ============================================================================
+
+class IntegrationLayer:
     """
-    Unified form filler that combines all advanced features.
-    Maintains backward compatibility with existing workflow.
+    Integration Layer - Bridge between agents and v4 system.
+    
+    Responsibilities:
+    - Execute agent workflows
+    - Manage state transitions
+    - Handle callbacks to v4 system
+    - Coordinate between old and new systems
+    - Provide unified interface
     """
     
-    def __init__(self, page: Page, identity: Any, verbose: bool = True, ai_helper: Optional[Any] = None):
-        self.page = page
-        self.identity = identity
-        self.verbose = verbose
-        self.ai_helper = ai_helper if AI_AVAILABLE else None
-        
-        # Initialize components
-        self.detection_engine = FormDetectionEngine(page, verbose, ai_helper=ai_helper)
-        self.dynamic_handler = DynamicFormHandler(page, verbose)
-        self.password_manager = PasswordManager()
-        self.username_manager = UsernameManager()
-        
-        # Parse date_of_birth string (format: dd-mm-yyyy)
-        if hasattr(identity, 'date_of_birth') and identity.date_of_birth:
-            try:
-                day, month, year = map(int, identity.date_of_birth.split('-'))
-                self.dob_handler = DOBHandler(year, month, day)
-            except:
-                # Fallback to default values if parsing fails
-                self.dob_handler = DOBHandler(2000, 1, 1)
-        else:
-            self.dob_handler = DOBHandler(2000, 1, 1)
-        self.dropdown_handler = DropdownHandler(identity)
-        
-        # Track filled fields
-        self.filled_fields: Dict[str, bool] = {}
-    
-    def log(self, message: str):
-        """Log messages if verbose enabled."""
-        if self.verbose:
-            print(f"[UNIFIED] {message}")
-    
-    async def discover_and_fill_all(self, email: str) -> Dict[str, bool]:
+    def __init__(
+        self,
+        model_router: ModelRouter,
+        domain_intelligence: DomainIntelligence,
+        logger: Optional[logging.Logger] = None
+    ):
         """
-        Main entry point: Discover all fields and auto-fill them.
+        Initialize Integration Layer.
         
         Args:
-            email: Email address to fill
-        
-        Returns:
-            Dict of {field_type: success_bool}
+            model_router: Model router instance
+            domain_intelligence: Domain intelligence database
+            logger: Optional logger instance
         """
-        self.log("Starting unified form discovery and filling...")
+        self.model_router = model_router
+        self.domain_intelligence = domain_intelligence
+        self.logger = logger or logging.getLogger(__name__)
         
-        # Discover all fields
-        fields = await self.detection_engine.discover_all_fields()
-        
-        if not fields:
-            self.log("No fields discovered, trying dynamic wait...")
-            # Wait for fields to appear dynamically
-            await asyncio.sleep(2)
-            fields = await self.detection_engine.discover_all_fields()
-        
-        self.log(f"Discovered {len(fields)} fields")
-        
-        # Fill fields by priority
-        await self._fill_email(fields, email)
-        await self._fill_password(fields)
-        await self._fill_username(fields)
-        await self._fill_name_fields(fields)
-        await self._fill_phone(fields)
-        await self._fill_dob(fields)
-        await self._fill_gender(fields)
-        await self._fill_country(fields)
-        await self._auto_check_boxes()
-        
-        return self.filled_fields
-    
-    async def _fill_email(self, fields: list, email: str):
-        """Fill email field with validation."""
-        email_field = next((f for f in fields if f.field_type == "email"), None)
-        
-        if email_field:
-            self.log(f"Filling email field (confidence={email_field.confidence})...")
-            success = await set_field_value(
-                email_field.locator, 
-                email, 
-                self.verbose,
-                frame_context=email_field.frame_context
-            )
-            
-            # Validate the value was set correctly
-            if success:
-                try:
-                    actual_value = await email_field.locator.input_value()
-                    if actual_value != email:
-                        self.log(f"Email validation failed, retrying... (expected: {email}, got: {actual_value})")
-                        await email_field.locator.clear()
-                        success = await set_field_value(email_field.locator, email, self.verbose, frame_context=email_field.frame_context)
-                except:
-                    pass
-            
-            self.filled_fields["email"] = success
-        else:
-            self.log("No email field found")
-            self.filled_fields["email"] = False
-    
-    async def _fill_password(self, fields: list):
-        """Fill password and confirm password fields with validation and retry."""
-        password_fields = [f for f in fields if f.field_type == "password"]
-        confirm_fields = [f for f in fields if f.field_type == "confirm_password"]
-        
-        if password_fields or confirm_fields:
-            password = self.password_manager.get_or_generate()
-            self.log(f"Generated password: {password}")
-            
-            # Fill password field with retry
-            if password_fields:
-                success = False
-                for attempt in range(3):
-                    success = await set_field_value(password_fields[0].locator, password, self.verbose, frame_context=password_fields[0].frame_context)
-                    if success:
-                        break
-                    self.log(f"Password fill attempt {attempt + 1} failed, retrying...")
-                    await asyncio.sleep(0.5)
-                self.filled_fields["password"] = success
-            
-            # Fill confirm password field with retry
-            if confirm_fields:
-                success = False
-                for attempt in range(3):
-                    success = await set_field_value(confirm_fields[0].locator, password, self.verbose, frame_context=confirm_fields[0].frame_context)
-                    if success:
-                        break
-                    self.log(f"Confirm password fill attempt {attempt + 1} failed, retrying...")
-                    await asyncio.sleep(0.5)
-                self.filled_fields["confirm_password"] = success
-        else:
-            self.log("No password fields found")
-    
-    async def _fill_username(self, fields: list):
-        """Fill username/display name fields."""
-        username_fields = [f for f in fields if f.field_type in ["username", "display_name"]]
-        
-        if username_fields:
-            username = self.username_manager.get_or_generate(
-                self.identity.first_name,
-                self.identity.last_name
-            )
-            self.log(f"Generated username: {username}")
-            
-            success = await set_field_value(username_fields[0].locator, username, self.verbose, frame_context=username_fields[0].frame_context)
-            self.filled_fields["username"] = success
-        else:
-            self.log("No username fields found")
-    
-    async def _fill_name_fields(self, fields: list):
-        """Fill name fields (first, last, full)."""
-        first_name_fields = [f for f in fields if f.field_type == "first_name"]
-        last_name_fields = [f for f in fields if f.field_type == "last_name"]
-        full_name_fields = [f for f in fields if f.field_type == "full_name"]
-        
-        if full_name_fields:
-            success = await set_field_value(
-                full_name_fields[0].locator,
-                self.identity.full_name,
-                self.verbose
-            )
-            self.filled_fields["full_name"] = success
-        elif first_name_fields or last_name_fields:
-            if first_name_fields:
-                success = await set_field_value(
-                    first_name_fields[0].locator,
-                    self.identity.first_name,
-                    self.verbose
-                )
-                self.filled_fields["first_name"] = success
-            
-            if last_name_fields:
-                success = await set_field_value(
-                    last_name_fields[0].locator,
-                    self.identity.last_name,
-                    self.verbose
-                )
-                self.filled_fields["last_name"] = success
-        else:
-            self.log("No name fields found")
-    
-    async def _fill_phone(self, fields: list):
-        """Fill phone field."""
-        phone_fields = [f for f in fields if f.field_type == "phone"]
-        
-        if phone_fields:
-            success = await set_field_value(
-                phone_fields[0].locator,
-                self.identity.phone,
-                self.verbose
-            )
-            self.filled_fields["phone"] = success
-        else:
-            self.log("No phone fields found")
-    
-    async def _fill_dob(self, fields: list):
-        """Fill date of birth field."""
-        dob_fields = [f for f in fields if f.field_type == "date_of_birth"]
-        
-        if dob_fields:
-            success = await self.dob_handler.fill_date_input(
-                dob_fields[0].locator,
-                self.verbose
-            )
-            self.filled_fields["date_of_birth"] = success
-        else:
-            self.log("No DOB fields found")
-    
-    async def _fill_gender(self, fields: list):
-        """Fill gender dropdown."""
-        gender_fields = [f for f in fields if f.field_type == "gender"]
-        
-        if gender_fields:
-            success = await self.dropdown_handler.fill_gender(
-                gender_fields[0].locator,
-                self.verbose
-            )
-            self.filled_fields["gender"] = success
-        else:
-            self.log("No gender fields found")
-    
-    async def _fill_country(self, fields: list):
-        """Fill country dropdown."""
-        country_fields = [f for f in fields if f.field_type == "country"]
-        
-        if country_fields:
-            success = await self.dropdown_handler.fill_country(
-                country_fields[0].locator,
-                self.verbose
-            )
-            self.filled_fields["country"] = success
-        else:
-            self.log("No country fields found")
-    
-    async def _auto_check_boxes(self):
-        """Auto-check safe checkboxes."""
-        try:
-            checkboxes = await self.page.locator('input[type="checkbox"]').all()
-            
-            if checkboxes:
-                self.log(f"Found {len(checkboxes)} checkboxes, analyzing...")
-                checked_count = await CheckboxHandler.auto_check_safe_boxes(
-                    checkboxes,
-                    self.verbose
-                )
-                self.filled_fields["checkboxes"] = checked_count > 0
-                self.log(f"Auto-checked {checked_count} safe checkboxes")
-            else:
-                self.log("No checkboxes found")
-        except Exception as e:
-            self.log(f"Error checking boxes: {e}")
-    
-    async def wait_for_otp_field(self, timeout: int = 15) -> Optional[Any]:
-        """
-        Wait for OTP field to appear (for multi-step forms).
-        Uses dynamic form handler with MutationObserver and aggressive rescanning.
-        
-        Args:
-            timeout: Maximum seconds to wait
-        
-        Returns:
-            OTP field locator or None
-        """
-        self.log(f"Waiting for OTP field (timeout={timeout}s)...")
-        
-        async def check_otp():
-            # Try multiple direct selectors first (faster than full scan)
-            direct_selectors = [
-                'input[name*="token" i]',
-                'input[id*="token" i]',
-                'input[name*="otp" i]',
-                'input[id*="otp" i]',
-                'input[name*="code" i]',
-                'input[id*="code" i]',
-                'input[name*="verif" i]',
-                'input[id*="verif" i]',
-                'input[placeholder*="token" i]',
-                'input[placeholder*="code" i]',
-                'input[placeholder*="verif" i]',
-                'input[aria-label*="token" i]',
-                'input[aria-label*="code" i]',
-                'input[aria-label*="verif" i]',
-                'input[type="text"][maxlength="6"]',
-                'input[type="text"][maxlength="7"]',
-                'input[type="text"][maxlength="8"]',
-            ]
-            
-            for selector in direct_selectors:
-                try:
-                    field = self.page.locator(selector).first
-                    if await field.count() > 0 and await field.is_visible():
-                        self.log(f"Found OTP field via selector: {selector}")
-                        return field
-                except:
-                    continue
-            
-            # Fallback: Full scan (but limit iframe scanning)
-            self.detection_engine.discovered_fields = []
-            fields = await self.detection_engine.discover_all_fields()
-            otp_fields = [f for f in fields if f.field_type == "otp"]
-            
-            if otp_fields:
-                self.log(f"Found OTP field with confidence={otp_fields[0].confidence}")
-                return otp_fields[0].locator
-            
-            return None
-        
-        otp_field = await self.dynamic_handler.smart_wait_for_field(
-            check_otp,
-            timeout=timeout,
-            field_name="OTP field",
-            use_observer=True
+        # Initialize coordinator
+        self.coordinator = CoordinatorAgent(
+            model_router=model_router,
+            domain_intelligence=domain_intelligence,
+            logger=self.logger
         )
         
-        return otp_field
+        # Active workflows
+        self.active_workflows: Dict[str, Dict[str, Any]] = {}
+        
+        # Callbacks for v4 system
+        self.callbacks: Dict[str, List[Callable]] = {
+            "on_start": [],
+            "on_progress": [],
+            "on_success": [],
+            "on_failure": [],
+            "on_complete": []
+        }
     
-    def get_generated_password(self) -> Optional[str]:
-        """Get the generated password for display."""
-        return self.password_manager.generated_password
+    # ========================================================================
+    # WORKFLOW EXECUTION
+    # ========================================================================
     
-    def get_generated_username(self) -> Optional[str]:
-        """Get the generated username for display."""
-        return self.username_manager.generated_username
+    async def execute_registration(
+        self,
+        url: str,
+        email: Optional[str] = None,
+        identity_data: Optional[Dict[str, Any]] = None,
+        budget: float = 0.01,
+        timeout: int = 180
+    ) -> Dict[str, Any]:
+        """
+        Execute registration workflow using multi-agent system.
+        
+        Args:
+            url: Registration URL
+            email: Optional pre-generated email
+            identity_data: Optional identity data
+            budget: Maximum budget for AI calls
+            timeout: Maximum execution time in seconds
+        
+        Returns:
+            Registration result dictionary
+        """
+        workflow_id = self._generate_workflow_id()
+        start_time = time.time()
+        
+        try:
+            self.logger.info(f"Starting registration workflow {workflow_id} for {url}")
+            
+            # Create workflow state
+            workflow_state = {
+                "id": workflow_id,
+                "url": url,
+                "state": WorkflowState.RUNNING,
+                "start_time": start_time,
+                "budget": budget,
+                "budget_used": 0.0,
+                "steps_completed": [],
+                "current_step": None
+            }
+            
+            self.active_workflows[workflow_id] = workflow_state
+            
+            # Trigger on_start callbacks
+            await self._trigger_callbacks("on_start", workflow_state)
+            
+            # Create agent context
+            context = create_agent_context(
+                workflow_id=workflow_id,
+                url=url,
+                budget_remaining=budget
+            )
+            
+            # Add identity data if provided
+            if identity_data:
+                context.metadata["identity_data"] = identity_data
+            
+            if email:
+                context.metadata["email"] = email
+            
+            # Execute coordinator
+            result = await asyncio.wait_for(
+                self.coordinator.execute(context),
+                timeout=timeout
+            )
+            
+            # Update workflow state
+            workflow_state["budget_used"] = result.cost
+            workflow_state["execution_time"] = time.time() - start_time
+            
+            if result.status == AgentStatus.SUCCESS:
+                workflow_state["state"] = WorkflowState.SUCCESS
+                await self._trigger_callbacks("on_success", workflow_state)
+            elif result.status == AgentStatus.PARTIAL:
+                workflow_state["state"] = WorkflowState.PARTIAL
+            else:
+                workflow_state["state"] = WorkflowState.FAILED
+                await self._trigger_callbacks("on_failure", workflow_state)
+            
+            # Trigger on_complete callbacks
+            await self._trigger_callbacks("on_complete", workflow_state)
+            
+            # Convert to v4-compatible format
+            return self._convert_to_v4_format(result, workflow_state)
+            
+        except asyncio.TimeoutError:
+            self.logger.error(f"Workflow {workflow_id} timed out after {timeout}s")
+            workflow_state["state"] = WorkflowState.FAILED
+            workflow_state["error"] = "Timeout"
+            await self._trigger_callbacks("on_failure", workflow_state)
+            
+            return {
+                "success": False,
+                "error": "Workflow timeout",
+                "workflow_id": workflow_id,
+                "execution_time": time.time() - start_time
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Workflow {workflow_id} error: {str(e)}")
+            workflow_state["state"] = WorkflowState.FAILED
+            workflow_state["error"] = str(e)
+            await self._trigger_callbacks("on_failure", workflow_state)
+            
+            return {
+                "success": False,
+                "error": str(e),
+                "workflow_id": workflow_id,
+                "execution_time": time.time() - start_time
+            }
+        
+        finally:
+            # Cleanup
+            if workflow_id in self.active_workflows:
+                del self.active_workflows[workflow_id]
+    
+    # ========================================================================
+    # V4 COMPATIBILITY
+    # ========================================================================
+    
+    def _convert_to_v4_format(
+        self,
+        agent_result: Any,
+        workflow_state: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Convert agent result to v4-compatible format."""
+        return {
+            "success": agent_result.status == AgentStatus.SUCCESS,
+            "workflow_id": workflow_state["id"],
+            "url": workflow_state["url"],
+            "execution_time": workflow_state.get("execution_time", 0),
+            "cost": workflow_state.get("budget_used", 0),
+            "confidence": agent_result.confidence,
+            "data": agent_result.data,
+            "steps_completed": workflow_state.get("steps_completed", []),
+            "error": agent_result.error if hasattr(agent_result, "error") else None
+        }
+    
+    # ========================================================================
+    # CALLBACK MANAGEMENT
+    # ========================================================================
+    
+    def register_callback(
+        self,
+        event: str,
+        callback: Callable
+    ) -> None:
+        """
+        Register callback for workflow events.
+        
+        Args:
+            event: Event name (on_start, on_progress, on_success, on_failure, on_complete)
+            callback: Callback function
+        """
+        if event in self.callbacks:
+            self.callbacks[event].append(callback)
+        else:
+            self.logger.warning(f"Unknown event type: {event}")
+    
+    async def _trigger_callbacks(
+        self,
+        event: str,
+        workflow_state: Dict[str, Any]
+    ) -> None:
+        """Trigger callbacks for event."""
+        if event in self.callbacks:
+            for callback in self.callbacks[event]:
+                try:
+                    if asyncio.iscoroutinefunction(callback):
+                        await callback(workflow_state)
+                    else:
+                        callback(workflow_state)
+                except Exception as e:
+                    self.logger.error(f"Callback error for {event}: {str(e)}")
+    
+    # ========================================================================
+    # WORKFLOW MANAGEMENT
+    # ========================================================================
+    
+    def get_workflow_status(self, workflow_id: str) -> Optional[Dict[str, Any]]:
+        """Get status of active workflow."""
+        return self.active_workflows.get(workflow_id)
+    
+    def cancel_workflow(self, workflow_id: str) -> bool:
+        """Cancel active workflow."""
+        if workflow_id in self.active_workflows:
+            self.active_workflows[workflow_id]["state"] = WorkflowState.CANCELLED
+            self.logger.info(f"Cancelled workflow {workflow_id}")
+            return True
+        return False
+    
+    def get_active_workflows(self) -> List[Dict[str, Any]]:
+        """Get all active workflows."""
+        return list(self.active_workflows.values())
+    
+    # ========================================================================
+    # HELPER METHODS
+    # ========================================================================
+    
+    def _generate_workflow_id(self) -> str:
+        """Generate unique workflow ID."""
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        return f"workflow_{timestamp}_{id(self) % 10000}"
 
 
 # ============================================================================
-# BACKWARD COMPATIBLE WRAPPER
+# V4 BRIDGE FUNCTIONS
 # ============================================================================
 
-async def enhanced_find_and_fill_email(
-    page: Page,
-    email: str,
-    identity: Any,
-    verbose: bool = True
-) -> bool:
+class V4Bridge:
     """
-    Enhanced email field finder with fallback to legacy method.
-    
-    Args:
-        page: Playwright page
-        email: Email to fill
-        identity: Identity object
-        verbose: Enable logging
-    
-    Returns:
-        True if successful, False otherwise
+    Bridge functions for backward compatibility with v4 system.
     """
-    filler = UnifiedFormFiller(page, identity, verbose)
     
-    # Try advanced detection first
-    results = await filler.discover_and_fill_all(email)
+    def __init__(self, integration_layer: IntegrationLayer):
+        """Initialize V4 Bridge."""
+        self.integration = integration_layer
     
-    if results.get("email", False):
-        return True
+    async def register_account(
+        self,
+        url: str,
+        email: Optional[str] = None,
+        password: Optional[str] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        V4-compatible registration function.
+        
+        Args:
+            url: Registration URL
+            email: Optional email
+            password: Optional password
+            **kwargs: Additional parameters
+        
+        Returns:
+            Registration result
+        """
+        identity_data = {}
+        
+        if email:
+            identity_data["email"] = email
+        if password:
+            identity_data["password"] = password
+        
+        # Add any additional fields
+        for key, value in kwargs.items():
+            identity_data[key] = value
+        
+        return await self.integration.execute_registration(
+            url=url,
+            identity_data=identity_data
+        )
     
-    # Fallback to legacy regex-based detection
-    if verbose:
-        print("[UNIFIED] Advanced detection failed, trying legacy method...")
-    
-    return False
+    def get_status(self, workflow_id: str) -> Optional[Dict[str, Any]]:
+        """Get workflow status (v4-compatible)."""
+        return self.integration.get_workflow_status(workflow_id)
 
 
-async def enhanced_wait_for_otp_field(
-    page: Page,
-    identity: Any,
-    timeout: int = 15,
-    verbose: bool = True
-) -> Optional[Any]:
+# ============================================================================
+# FACTORY FUNCTIONS
+# ============================================================================
+
+def create_integration_layer(
+    config_path: Optional[str] = None,
+    logger: Optional[logging.Logger] = None
+) -> IntegrationLayer:
     """
-    Enhanced OTP field waiter with dynamic form support.
+    Factory function to create integration layer.
     
     Args:
-        page: Playwright page
-        identity: Identity object
-        timeout: Maximum seconds to wait
-        verbose: Enable logging
+        config_path: Optional path to config file
+        logger: Optional logger instance
     
     Returns:
-        OTP field locator or None
+        IntegrationLayer instance
     """
-    filler = UnifiedFormFiller(page, identity, verbose)
-    return await filler.wait_for_otp_field(timeout)
+    # Initialize components
+    model_router = ModelRouter(config_path=config_path)
+    domain_intelligence = DomainIntelligence()
+    
+    return IntegrationLayer(
+        model_router=model_router,
+        domain_intelligence=domain_intelligence,
+        logger=logger
+    )
+
+
+def create_v4_bridge(
+    config_path: Optional[str] = None,
+    logger: Optional[logging.Logger] = None
+) -> V4Bridge:
+    """
+    Factory function to create v4 bridge.
+    
+    Args:
+        config_path: Optional path to config file
+        logger: Optional logger instance
+    
+    Returns:
+        V4Bridge instance
+    """
+    integration = create_integration_layer(config_path, logger)
+    return V4Bridge(integration)
+
+
+# ============================================================================
+# CLI FOR TESTING
+# ============================================================================
+
+if __name__ == "__main__":
+    from rich.console import Console
+    import asyncio
+    
+    console = Console()
+    
+    console.print("\n[bold cyan]Integration Layer - Test[/bold cyan]\n")
+    
+    async def test():
+        # Create integration layer
+        integration = create_integration_layer()
+        
+        # Register callbacks
+        def on_start(state):
+            console.print(f"[cyan]Started:[/cyan] {state['id']}")
+        
+        def on_success(state):
+            console.print(f"[green]Success:[/green] {state['id']}")
+        
+        def on_failure(state):
+            console.print(f"[red]Failed:[/red] {state['id']}")
+        
+        integration.register_callback("on_start", on_start)
+        integration.register_callback("on_success", on_success)
+        integration.register_callback("on_failure", on_failure)
+        
+        # Test registration
+        console.print("[cyan]Testing registration workflow...[/cyan]")
+        
+        result = await integration.execute_registration(
+            url="https://example.com/signup",
+            budget=0.01,
+            timeout=60
+        )
+        
+        console.print(f"\n[green]Result:[/green]")
+        console.print(f"  Success: {result.get('success')}")
+        console.print(f"  Workflow ID: {result.get('workflow_id')}")
+        console.print(f"  Execution Time: {result.get('execution_time', 0):.2f}s")
+        console.print(f"  Cost: ${result.get('cost', 0):.6f}")
+        console.print(f"  Confidence: {result.get('confidence', 0):.2f}")
+        
+        # Test V4 bridge
+        console.print(f"\n[cyan]Testing V4 Bridge...[/cyan]")
+        bridge = V4Bridge(integration)
+        
+        result = await bridge.register_account(
+            url="https://example.com/signup",
+            email="test@example.com"
+        )
+        
+        console.print(f"  Success: {result.get('success')}")
+        console.print(f"  Workflow ID: {result.get('workflow_id')}")
+    
+    asyncio.run(test())
