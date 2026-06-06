@@ -36,6 +36,14 @@ from magic_link_handler import extract_magic_link_with_context, extract_domain_f
 from image_otp_extractor import extract_otp_from_email_images
 from retry_utils import retry_async, retry_sync
 
+# AI integration (optional)
+try:
+    from ai_form_analyzer import AIFormHelper
+    AI_AVAILABLE = True
+except ImportError:
+    AI_AVAILABLE = False
+    AIFormHelper = None
+
 console = Console()
 CONFIG_FILE = Path(__file__).parent / "config.json"
 LOG_DIR = Path(__file__).parent / ".logs"
@@ -171,7 +179,7 @@ async def validate_field_filled(locator, expected_value: str, field_name: str, l
 # ============================================================================
 
 async def run_automation(url: str, api_key: str) -> None:
-    """Main automation workflow with advanced detection."""
+    """Main automation workflow with advanced detection and AI fallbacks."""
     session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     logger = setup_logging(session_id)
     
@@ -179,6 +187,21 @@ async def run_automation(url: str, api_key: str) -> None:
     logger.info(f"NEW SESSION STARTED: {session_id}")
     logger.info(f"Target URL: {url}")
     logger.info("="*80)
+    
+    # Initialize AI helper (optional)
+    ai_helper = None
+    if AI_AVAILABLE:
+        try:
+            ai_helper = AIFormHelper()
+            if ai_helper.enabled:
+                console.print("[cyan]🤖 AI features enabled[/cyan]")
+                logger.info("AI helper initialized successfully")
+            else:
+                console.print("[yellow]⚠ AI features disabled (no API key)[/yellow]")
+                logger.info("AI helper disabled - no API key configured")
+        except Exception as e:
+            console.print(f"[yellow]⚠ AI initialization failed: {e}[/yellow]")
+            logger.warning(f"AI helper initialization failed: {e}")
     
     try:
         # Step 1: Generate Identity
@@ -216,8 +239,7 @@ async def run_automation(url: str, api_key: str) -> None:
             
             await retry_async(
                 lambda: page.goto(url, wait_until="domcontentloaded", timeout=30000),
-                label="page load",
-                logger=logger
+                label="page load"
             )
             console.print("[green]✓[/green] Page loaded")
             logger.info("Page loaded successfully")
@@ -225,11 +247,29 @@ async def run_automation(url: str, api_key: str) -> None:
             # Capture initial screenshot
             await capture_screenshot(page, session_id, "01_initial", logger)
             
+            # Step 4.5: Wait for dynamic content to load
+            console.print("\n[bold cyan]═══ Step 4: Wait for Dynamic Content ═══[/bold cyan]")
+            logger.info("Waiting for page to fully load (dynamic content)...")
+            
+            try:
+                # Wait for network to be idle (all resources loaded)
+                await page.wait_for_load_state("networkidle", timeout=10000)
+                console.print("[green]✓[/green] Network idle detected")
+                logger.info("Network idle state reached")
+            except Exception as e:
+                logger.warning(f"Network idle timeout: {e}")
+                console.print("[yellow]⚠[/yellow] Network idle timeout, continuing...")
+            
+            # Additional wait for React/dynamic forms to render
+            console.print("[cyan]Waiting 7 seconds for dynamic forms to render...[/cyan]")
+            await asyncio.sleep(7)
+            logger.info("Dynamic content wait completed")
+            
             # Step 5: ADVANCED FORM DETECTION AND FILLING
-            console.print("\n[bold cyan]═══ Step 4: Advanced Form Detection ═══[/bold cyan]")
+            console.print("\n[bold cyan]═══ Step 5: Advanced Form Detection ═══[/bold cyan]")
             logger.info("Starting advanced form detection...")
             
-            filler = UnifiedFormFiller(page, identity, verbose=True)
+            filler = UnifiedFormFiller(page, identity, verbose=True, ai_helper=ai_helper)
             filled_fields = await filler.discover_and_fill_all(email)
             
             logger.info(f"Form filling results: {filled_fields}")
@@ -245,33 +285,73 @@ async def run_automation(url: str, api_key: str) -> None:
             await asyncio.sleep(0.5)
             await capture_screenshot(page, session_id, "03_form_filled", logger)
             
-            # Step 6: Find and Click Send Code Button
-            console.print("\n[bold cyan]═══ Step 5: Send Verification Code ═══[/bold cyan]")
-            logger.info("Looking for send code button...")
+            # Step 6: Find and Click Next/Continue/Submit Button (AI-Enhanced)
+            console.print("\n[bold cyan]═══ Step 6: Navigate Form ═══[/bold cyan]")
+            logger.info("Looking for next action button...")
             
             try:
-                # Use FormDetectionEngine to find button
-                send_buttons = await page.locator('button, [role="button"], input[type="submit"]').all()
+                # Get all visible buttons
+                all_buttons = await page.locator('button, [role="button"], input[type="submit"]').all()
+                button_texts = []
+                button_map = {}
                 
-                send_clicked = False
-                for btn in send_buttons:
+                for btn in all_buttons:
                     try:
-                        if not await btn.is_visible() or not await btn.is_enabled():
-                            continue
-                        
-                        text = await btn.inner_text()
-                        if re.search(r'(send|get|request|resend|generate)[\s\-_]*(code|otp|email)', text, re.IGNORECASE):
-                            await btn.click()
-                            console.print("[green]✓[/green] Send Code clicked")
-                            logger.info(f"Send code button clicked: {text}")
-                            send_clicked = True
-                            break
+                        if await btn.is_visible() and await btn.is_enabled():
+                            text = await btn.inner_text()
+                            text = text.strip()
+                            if text:
+                                button_texts.append(text)
+                                button_map[text] = btn
                     except:
                         continue
                 
-                if not send_clicked:
-                    console.print("[yellow]⚠[/yellow] No Send Code button found, assuming auto-send")
-                    logger.warning("No send code button found")
+                logger.info(f"Found {len(button_texts)} visible buttons: {button_texts}")
+                
+                button_clicked = False
+                clicked_button = None
+                
+                # Try regex patterns first (deterministic)
+                for text, btn in button_map.items():
+                    if re.search(r'(next|continue|submit|verify|send|get|proceed|start|begin)[\s\-_]*(code|otp|email|step)?', text, re.IGNORECASE):
+                        try:
+                            await btn.click()
+                            console.print(f"[green]✓[/green] Clicked button: {text}")
+                            logger.info(f"Button clicked (regex): {text}")
+                            button_clicked = True
+                            clicked_button = text
+                            break
+                        except:
+                            continue
+                
+                # AI FALLBACK: If no button clicked and AI available
+                if not button_clicked and ai_helper and ai_helper.enabled and button_texts:
+                    console.print("[cyan]🤖 Using AI to determine next button...[/cyan]")
+                    logger.info("Using AI navigation agent")
+                    
+                    # Get page context
+                    try:
+                        page_title = await page.title()
+                    except:
+                        page_title = "Registration Form"
+                    
+                    completed_fields = [k for k, v in filled_fields.items() if v]
+                    
+                    ai_button = ai_helper.get_next_button(button_texts, page_title, completed_fields)
+                    
+                    if ai_button and ai_button in button_map:
+                        try:
+                            await button_map[ai_button].click()
+                            console.print(f"[green]✓[/green] AI clicked button: {ai_button}")
+                            logger.info(f"Button clicked (AI): {ai_button}")
+                            button_clicked = True
+                            clicked_button = ai_button
+                        except Exception as e:
+                            logger.error(f"AI button click failed: {e}")
+                
+                if not button_clicked:
+                    console.print("[yellow]⚠[/yellow] No action button found, continuing...")
+                    logger.warning("No action button found")
                 
                 await asyncio.sleep(2)
                 await capture_screenshot(page, session_id, "04_code_sent", logger)
@@ -281,7 +361,7 @@ async def run_automation(url: str, api_key: str) -> None:
                 console.print("[yellow]⚠[/yellow] Send code step skipped")
             
             # Step 7: Wait for Email (Extended timeout for delayed emails)
-            console.print("\n[bold cyan]═══ Step 6: Wait for Email ═══[/bold cyan]")
+            console.print("\n[bold cyan]═══ Step 7: Wait for Email ═══[/bold cyan]")
             email_content = await smart_poll_inbox_async(provider, auth_data, timeout=180)
             
             if not email_content:
@@ -291,14 +371,39 @@ async def run_automation(url: str, api_key: str) -> None:
             
             logger.info(f"Email received, length: {len(email_content)} chars")
             
-            # Step 7.5: Check for Magic Link or OTP
-            console.print("\n[bold cyan]═══ Step 7: Detect Verification Type ═══[/bold cyan]")
+            # Step 8: Check for Magic Link or OTP
+            console.print("\n[bold cyan]═══ Step 8: Detect Verification Type ═══[/bold cyan]")
             registration_domain = extract_domain_from_url(url)
             magic_link, verification_type = extract_magic_link_with_context(
                 email_content, 
                 registration_domain, 
                 verbose=True
             )
+            
+            # AI FALLBACK: If magic link detection is ambiguous, use AI
+            if not magic_link and ai_helper and ai_helper.enabled:
+                console.print("[cyan]🤖 Using AI to identify verification link...[/cyan]")
+                logger.info("Attempting AI-based magic link detection")
+                
+                # Extract all links from email
+                import re as regex_module
+                links = regex_module.findall(r'https?://[^\s<>"]+', email_content)
+                
+                if links:
+                    try:
+                        # Get email subject if available
+                        subject_match = regex_module.search(r'Subject:\s*(.+)', email_content)
+                        email_subject = subject_match.group(1) if subject_match else "Verification Email"
+                        
+                        ai_magic_link = ai_helper.find_magic_link(email_subject, email_content, links)
+                        
+                        if ai_magic_link:
+                            magic_link = ai_magic_link
+                            verification_type = "magic_link"
+                            console.print(f"[green]✓[/green] AI identified magic link")
+                            logger.info(f"AI magic link: {magic_link}")
+                    except Exception as e:
+                        logger.error(f"AI magic link detection failed: {e}")
             
             if verification_type == "magic_link" and magic_link:
                 # Handle magic link verification
@@ -335,11 +440,11 @@ async def run_automation(url: str, api_key: str) -> None:
                     logger.warning("Magic link did not change URL, falling back to OTP")
                     console.print("[yellow]⚠[/yellow] Magic link did not redirect, trying OTP...")
             
-            # Step 8: Extract OTP (fallback or primary method)
-            console.print("\n[bold cyan]═══ Step 8: Extract OTP ═══[/bold cyan]")
+            # Step 9: Extract OTP (fallback or primary method)
+            console.print("\n[bold cyan]═══ Step 9: Extract OTP ═══[/bold cyan]")
             otp = extract_otp(email_content, api_key, logger)
             
-            # Fallback: Try image OCR if text extraction failed
+            # Fallback 1: Try image OCR if text extraction failed
             if not otp:
                 console.print("[yellow]⚠[/yellow] Text OTP extraction failed, trying image OCR...")
                 logger.info("Attempting image-based OTP extraction")
@@ -349,14 +454,24 @@ async def run_automation(url: str, api_key: str) -> None:
                     console.print(f"[green]✓[/green] OTP extracted from image: {otp}")
                     logger.info(f"OTP extracted from image: {otp}")
             
+            # Fallback 2: AI OTP extraction (last resort)
+            if not otp and ai_helper and ai_helper.enabled:
+                console.print("[cyan]🤖 Using AI to extract OTP...[/cyan]")
+                logger.info("Attempting AI-based OTP extraction")
+                otp = ai_helper.extract_otp(email_content)
+                
+                if otp:
+                    console.print(f"[green]✓[/green] OTP extracted by AI: {otp}")
+                    logger.info(f"OTP extracted by AI: {otp}")
+            
             if not otp:
-                logger.error("Failed to extract OTP from email (text and image methods)")
+                logger.error("Failed to extract OTP from email (all methods: regex, image OCR, AI)")
                 logger.debug(f"Email content preview: {email_content[:500]}")
                 await capture_screenshot(page, session_id, "06_otp_extract_failed", logger)
-                raise Exception("Failed to extract OTP from email using all methods")
+                raise Exception("Failed to extract OTP from email using all available methods")
             
-            # Step 9: Wait for OTP Field (Dynamic Form Support)
-            console.print("\n[bold cyan]═══ Step 8: Enter OTP ═══[/bold cyan]")
+            # Step 10: Wait for OTP Field (Dynamic Form Support)
+            console.print("\n[bold cyan]═══ Step 10: Enter OTP ═══[/bold cyan]")
             logger.info("Waiting for OTP field...")
             
             otp_field = await filler.wait_for_otp_field(timeout=15)
@@ -380,8 +495,8 @@ async def run_automation(url: str, api_key: str) -> None:
             await asyncio.sleep(0.5)
             await capture_screenshot(page, session_id, "08_otp_entered", logger)
             
-            # Step 10: Submit
-            console.print("\n[bold cyan]═══ Step 9: Submit Form ═══[/bold cyan]")
+            # Step 11: Submit
+            console.print("\n[bold cyan]═══ Step 11: Submit Form ═══[/bold cyan]")
             logger.info("Looking for submit button...")
             
             submit_buttons = await page.locator('button, [role="button"], input[type="submit"]').all()

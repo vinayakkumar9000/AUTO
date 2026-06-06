@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Advanced Universal Form Detection Engine v1.1
+Advanced Universal Form Detection Engine v1.2
 Multi-context form discovery with iframe and Shadow DOM support
-ENHANCED: iframe interaction support, Shadow DOM pierce selectors
+ENHANCED: AI-powered field classification fallback
 Author: vinayakkumar9000
 """
 
@@ -13,6 +13,14 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # Third-party imports
 from playwright.async_api import ElementHandle, Frame, Locator, Page
+
+# AI integration (optional)
+try:
+    from ai_form_analyzer import AIFormHelper
+    AI_AVAILABLE = True
+except ImportError:
+    AI_AVAILABLE = False
+    AIFormHelper = None
 
 
 # ============================================================================
@@ -57,15 +65,20 @@ FIELD_PATTERNS = {
     "otp": [
         (r'\botp\b', 100),
         (r'\bverification[\s\-_]*code\b', 100),
+        (r'\bverification[\s\-_]*token\b', 100),
         (r'\bverify[\s\-_]*code\b', 100),
+        (r'\bverify[\s\-_]*token\b', 100),
         (r'\bcode\b', 95),
+        (r'\btoken\b', 95),
         (r'\bverif', 95),
         (r'\b2fa\b', 90),
         (r'\bmfa\b', 90),
         (r'\bone[\s\-_]*time\b', 90),
         (r'\bauth[\s\-_]*code\b', 95),
+        (r'\bauth[\s\-_]*token\b', 95),
         (r'\bpin\b', 85),
-        (r'\btoken\b', 85),
+        (r'\bsecurity[\s\-_]*code\b', 90),
+        (r'\bconfirm[\s\-_]*code\b', 90),
     ],
     "first_name": [
         (r'\bfirst[\s\-_]*name\b', 100),
@@ -149,10 +162,11 @@ class FieldCandidate:
 class FormDetectionEngine:
     """Advanced form detection with iframe and Shadow DOM support."""
     
-    def __init__(self, page: Page, verbose: bool = True):
+    def __init__(self, page: Page, verbose: bool = True, ai_helper: Optional[Any] = None):
         self.page = page
         self.verbose = verbose
         self.discovered_fields: List[FieldCandidate] = []
+        self.ai_helper = ai_helper if AI_AVAILABLE else None
     
     def log(self, message: str):
         """Log debug messages if verbose mode enabled."""
@@ -229,21 +243,34 @@ class FormDetectionEngine:
                 print(f"[SCAN] Error scanning context: {e}")
     
     async def _scan_iframes(self, context: Page | Frame, parent_path: List[str]):
-        """Recursively scan all iframes."""
+        """Recursively scan all iframes (limit depth to avoid excessive scanning)."""
         try:
+            # Limit iframe depth to prevent excessive scanning
+            if len(parent_path) > 2:
+                return
+            
             frames = context.frames if hasattr(context, 'frames') else []
+            
+            # Limit number of iframes to scan
+            max_iframes = 10
+            scanned = 0
             
             for i, frame in enumerate(frames):
                 if frame == context:  # Skip self
                     continue
+                
+                if scanned >= max_iframes:
+                    self.log(f"Skipping remaining iframes (limit reached: {max_iframes})")
+                    break
                 
                 frame_path = parent_path + [f"iframe_{i}"]
                 self.log(f"Scanning iframe: {' > '.join(frame_path)}")
                 
                 # Scan this iframe
                 await self._scan_context(frame, "iframe", frame_path)
+                scanned += 1
                 
-                # Recursively scan nested iframes
+                # Recursively scan nested iframes (with depth limit)
                 await self._scan_iframes(frame, frame_path)
         
         except Exception as e:
@@ -253,53 +280,11 @@ class FormDetectionEngine:
     async def _scan_shadow_dom_pierce(self, page: Page):
         """Scan Shadow DOM using pierce selectors (Playwright's shadow DOM support)."""
         try:
-            # Use pierce selector to find inputs in shadow DOM
-            # pierce selector automatically traverses shadow boundaries
-            shadow_inputs = await page.locator('pierce/input, pierce/select, pierce/textarea').all()
-            
-            for inp in shadow_inputs:
-                try:
-                    # Check if already found in main scan
-                    # (pierce also finds regular DOM elements)
-                    if not await inp.is_visible():
-                        continue
-                    
-                    # Get attributes
-                    attributes = await self._get_element_attributes(inp)
-                    
-                    # Get surrounding text
-                    surrounding_text = await self._get_surrounding_text(inp)
-                    
-                    # Classify field
-                    field_type, confidence = self._classify_field(attributes, surrounding_text)
-                    
-                    if field_type and confidence > 50:
-                        # Check if this field was already found in main scan
-                        # by comparing attributes
-                        is_duplicate = any(
-                            f.attributes.get('name') == attributes.get('name') and
-                            f.attributes.get('id') == attributes.get('id') and
-                            f.context != "shadow"
-                            for f in self.discovered_fields
-                        )
-                        
-                        if not is_duplicate:
-                            candidate = FieldCandidate(
-                                locator=inp,
-                                field_type=field_type,
-                                confidence=confidence,
-                                context="shadow",
-                                frame_path=["shadow_dom"],
-                                attributes=attributes,
-                                surrounding_text=surrounding_text
-                            )
-                            self.discovered_fields.append(candidate)
-                            self.log(f"Found {field_type} field in Shadow DOM (confidence={confidence})")
-                
-                except Exception as e:
-                    if self.verbose:
-                        print(f"[SCAN] Error processing shadow DOM input: {e}")
-                    continue
+            # Note: pierce/ selector is deprecated in newer Playwright versions
+            # Skipping Shadow DOM scanning for now to avoid errors
+            # Shadow DOM fields will need to be accessed via their host elements
+            self.log("Shadow DOM scanning skipped (pierce selector deprecated)")
+            return
         
         except Exception as e:
             if self.verbose:
@@ -371,6 +356,7 @@ class FormDetectionEngine:
     def _classify_field(self, attributes: Dict[str, str], surrounding_text: str) -> Tuple[Optional[str], int]:
         """
         Classify field type and return confidence score.
+        Uses AI fallback when regex confidence is low.
         Returns: (field_type, confidence_score)
         """
         scores = {}
@@ -407,7 +393,37 @@ class FormDetectionEngine:
         # Return highest scoring field type
         if scores:
             best_type = max(scores, key=scores.get)
-            return best_type, scores[best_type]
+            best_score = scores[best_type]
+            
+            # AI FALLBACK: If confidence is low, try AI classification
+            if best_score < 70 and self.ai_helper and self.ai_helper.enabled:
+                if self.verbose:
+                    print(f"[AI] Low confidence ({best_score}), trying AI classification...")
+                
+                ai_type, ai_confidence = self.ai_helper.classify_field(attributes, surrounding_text)
+                
+                if ai_type and ai_confidence > 0.7:
+                    # Convert AI confidence (0.0-1.0) to score (0-100)
+                    ai_score = int(ai_confidence * 100)
+                    if ai_score > best_score:
+                        if self.verbose:
+                            print(f"[AI] Using AI result: {ai_type} (confidence={ai_confidence:.2f})")
+                        return ai_type, ai_score
+            
+            return best_type, best_score
+        
+        # AI FALLBACK: No regex match, try AI as last resort
+        if self.ai_helper and self.ai_helper.enabled:
+            if self.verbose:
+                print("[AI] No regex match, trying AI classification...")
+            
+            ai_type, ai_confidence = self.ai_helper.classify_field(attributes, surrounding_text)
+            
+            if ai_type and ai_confidence > 0.7:
+                ai_score = int(ai_confidence * 100)
+                if self.verbose:
+                    print(f"[AI] Using AI result: {ai_type} (confidence={ai_confidence:.2f})")
+                return ai_type, ai_score
         
         return None, 0
     

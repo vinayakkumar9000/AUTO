@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Integration Layer v1.0
-Integrates advanced form detection with existing auto_registration.py workflow
+Integration Layer v1.1
+Integrates advanced form detection with AI-powered fallbacks
 Author: vinayakkumar9000
 """
 
@@ -23,6 +23,14 @@ from field_handlers import (
 )
 from form_detection_engine import FieldCandidate, FormDetectionEngine, set_field_value
 
+# AI integration (optional)
+try:
+    from ai_form_analyzer import AIFormHelper
+    AI_AVAILABLE = True
+except ImportError:
+    AI_AVAILABLE = False
+    AIFormHelper = None
+
 
 # ============================================================================
 # UNIFIED FORM FILLER
@@ -34,13 +42,14 @@ class UnifiedFormFiller:
     Maintains backward compatibility with existing workflow.
     """
     
-    def __init__(self, page: Page, identity: Any, verbose: bool = True):
+    def __init__(self, page: Page, identity: Any, verbose: bool = True, ai_helper: Optional[Any] = None):
         self.page = page
         self.identity = identity
         self.verbose = verbose
+        self.ai_helper = ai_helper if AI_AVAILABLE else None
         
         # Initialize components
-        self.detection_engine = FormDetectionEngine(page, verbose)
+        self.detection_engine = FormDetectionEngine(page, verbose, ai_helper=ai_helper)
         self.dynamic_handler = DynamicFormHandler(page, verbose)
         self.password_manager = PasswordManager()
         self.username_manager = UsernameManager()
@@ -296,7 +305,37 @@ class UnifiedFormFiller:
         self.log(f"Waiting for OTP field (timeout={timeout}s)...")
         
         async def check_otp():
-            # Force a fresh scan each time
+            # Try multiple direct selectors first (faster than full scan)
+            direct_selectors = [
+                'input[name*="token" i]',
+                'input[id*="token" i]',
+                'input[name*="otp" i]',
+                'input[id*="otp" i]',
+                'input[name*="code" i]',
+                'input[id*="code" i]',
+                'input[name*="verif" i]',
+                'input[id*="verif" i]',
+                'input[placeholder*="token" i]',
+                'input[placeholder*="code" i]',
+                'input[placeholder*="verif" i]',
+                'input[aria-label*="token" i]',
+                'input[aria-label*="code" i]',
+                'input[aria-label*="verif" i]',
+                'input[type="text"][maxlength="6"]',
+                'input[type="text"][maxlength="7"]',
+                'input[type="text"][maxlength="8"]',
+            ]
+            
+            for selector in direct_selectors:
+                try:
+                    field = self.page.locator(selector).first
+                    if await field.count() > 0 and await field.is_visible():
+                        self.log(f"Found OTP field via selector: {selector}")
+                        return field
+                except:
+                    continue
+            
+            # Fallback: Full scan (but limit iframe scanning)
             self.detection_engine.discovered_fields = []
             fields = await self.detection_engine.discover_all_fields()
             otp_fields = [f for f in fields if f.field_type == "otp"]
@@ -304,15 +343,6 @@ class UnifiedFormFiller:
             if otp_fields:
                 self.log(f"Found OTP field with confidence={otp_fields[0].confidence}")
                 return otp_fields[0].locator
-            
-            # Also try direct selector as fallback
-            try:
-                otp_input = self.page.locator('input[name*="otp" i], input[id*="otp" i], input[placeholder*="code" i], input[placeholder*="verif" i]').first
-                if await otp_input.count() > 0 and await otp_input.is_visible():
-                    self.log("Found OTP field via direct selector fallback")
-                    return otp_input
-            except:
-                pass
             
             return None
         
