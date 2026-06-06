@@ -5,8 +5,11 @@ MutationObserver and periodic rescanning for dynamically rendered forms
 Author: vinayakkumar9000
 """
 
+# Standard library imports
 import asyncio
-from typing import Optional, Callable, Any
+from typing import Any, Callable, Optional
+
+# Third-party imports
 from playwright.async_api import Page
 
 

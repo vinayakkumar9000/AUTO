@@ -1,37 +1,36 @@
 #!/usr/bin/env python3
 """
-Auto Registration Workflow v3.1.2 - AI-Free Production Release
+Auto Registration Workflow v4.0.0 - AI-Free Production Release
 Universal, robust automation with advanced form detection
 Integrates: FormDetectionEngine, FieldHandlers, DynamicFormSupport
 Author: vinayakkumar9000
 """
 
+# Standard library imports
 import asyncio
-import html
 import json
-import re
-import sys
-import time
-import random
-import string
 import logging
-from pathlib import Path
-from typing import Optional, Tuple, Callable, Any
+import sys
 from datetime import datetime
+from pathlib import Path
+from typing import Optional
 
+# Third-party imports
 import requests
-from playwright.async_api import async_playwright, Page, Browser
+from playwright.async_api import async_playwright, Page
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Prompt
 
 # Add parent directories to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "tempmail"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "identity"))
 
+# Local module imports
+from email_providers import generate_email_with_fallback, smart_poll_inbox_async
+from form_detection_engine import FormDetectionEngine
 from identity_generator import generate_identity
 from integration_layer import UnifiedFormFiller
-from form_detection_engine import FormDetectionEngine
+from retry_utils import retry_async, retry_sync
 
 console = Console()
 CONFIG_FILE = Path(__file__).parent / "config.json"
@@ -87,49 +86,9 @@ def save_config(config: dict) -> None:
     except Exception:
         pass
 
-def get_api_key() -> str:
-    """Get API key from config or prompt user."""
-    config = load_config()
-    if "freemodel_api_key" in config and config["freemodel_api_key"]:
-        return config["freemodel_api_key"]
-    
-    console.print("\n[cyan]FreeModel API Key Required[/cyan]")
-    console.print("Get your key from: https://freemodel.dev")
-    api_key = Prompt.ask("Enter your FreeModel API key", password=True)
-    
-    config["freemodel_api_key"] = api_key
-    save_config(config)
-    return api_key
 
-# ============================================================================
-# RETRY HELPERS
-# ============================================================================
 
-async def retry_async(fn: Callable, retries: int = 3, delay: float = 1.5, label: str = "step", logger: Optional[logging.Logger] = None) -> Any:
-    """Retry async function with logging."""
-    for attempt in range(retries):
-        try:
-            return await fn()
-        except Exception as e:
-            if logger:
-                logger.warning(f"Retry {label} (attempt {attempt + 1}/{retries}): {e}")
-            if attempt == retries - 1:
-                raise
-            console.print(f"[yellow]Retry {label} ({attempt + 1}/{retries}): {e}[/yellow]")
-            await asyncio.sleep(delay)
 
-def retry_sync(fn: Callable, retries: int = 3, delay: float = 1.5, label: str = "step", logger: Optional[logging.Logger] = None) -> Any:
-    """Retry sync function with logging."""
-    for attempt in range(retries):
-        try:
-            return fn()
-        except Exception as e:
-            if logger:
-                logger.warning(f"Retry {label} (attempt {attempt + 1}/{retries}): {e}")
-            if attempt == retries - 1:
-                raise
-            console.print(f"[yellow]Retry {label} ({attempt + 1}/{retries}): {e}[/yellow]")
-            time.sleep(delay)
 
 # ============================================================================
 # SCREENSHOT CAPTURE
@@ -161,213 +120,9 @@ def _rand_string(length: int) -> str:
     """Generate random string."""
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
-# ============================================================================
-# EMAIL PROVIDER: MAIL.TM
-# ============================================================================
 
-def generate_mailtm_email() -> Tuple[str, str, str]:
-    """Generate mail.tm email. Returns: (email, password, auth_token)"""
-    BASE = "https://api.mail.tm"
-    
-    domains_res = requests.get(f"{BASE}/domains?page=1", timeout=15)
-    domains_res.raise_for_status()
-    domain = domains_res.json()["hydra:member"][0]["domain"]
-    
-    local_part = _rand_string(10)
-    address = f"{local_part}@{domain}"
-    password = _rand_string(12)
-    
-    account_res = requests.post(f"{BASE}/accounts", json={"address": address, "password": password}, timeout=15)
-    account_res.raise_for_status()
-    
-    token_res = requests.post(f"{BASE}/token", json={"address": address, "password": password}, timeout=15)
-    token_res.raise_for_status()
-    auth = token_res.json()["token"]
-    
-    return address, password, auth
 
-def check_mailtm_inbox(auth_token: str) -> Optional[str]:
-    """Check mail.tm inbox once. Returns email content or None."""
-    BASE = "https://api.mail.tm"
-    headers = {"Authorization": f"Bearer {auth_token}"}
-    
-    inbox_res = requests.get(f"{BASE}/messages", headers=headers, timeout=15)
-    inbox_res.raise_for_status()
-    messages = inbox_res.json()["hydra:member"]
-    
-    if messages:
-        message_id = messages[0]["id"]
-        full_res = requests.get(f"{BASE}/messages/{message_id}", headers=headers, timeout=15)
-        full_res.raise_for_status()
-        data = full_res.json()
-        content = data.get("text") or data.get("html") or ""
-        if content and "<" in content:
-            content = html.unescape(re.sub(r'<[^>]+>', ' ', content))
-        return content
-    return None
 
-# ============================================================================
-# EMAIL PROVIDER: GUERRILLAMAIL
-# ============================================================================
-
-def generate_guerrillamail_email() -> Tuple[str, str, str]:
-    """Generate guerrillamail email. Returns: (email, sid_token, email_timestamp_str)"""
-    BASE = "https://api.guerrillamail.com/ajax.php"
-    
-    response = requests.get(BASE, params={"f": "get_email_address"}, timeout=15)
-    response.raise_for_status()
-    data = response.json()
-    
-    return data["email_addr"], data["sid_token"], str(data["email_timestamp"])
-
-def check_guerrillamail_inbox(sid_token: str, email_timestamp: str) -> Optional[str]:
-    """Check guerrillamail inbox once. Returns email content or None."""
-    BASE = "https://api.guerrillamail.com/ajax.php"
-    
-    response = requests.get(BASE, params={"f": "check_email", "sid_token": sid_token, "seq": email_timestamp}, timeout=15)
-    response.raise_for_status()
-    data = response.json()
-    
-    if data.get("list") and len(data["list"]) > 0:
-        email_id = data["list"][0]["mail_id"]
-        full_response = requests.get(BASE, params={"f": "fetch_email", "sid_token": sid_token, "email_id": email_id}, timeout=15)
-        full_response.raise_for_status()
-        mail_body = full_response.json().get("mail_body", "")
-        clean_body = html.unescape(re.sub(r'<[^>]+>', ' ', mail_body))
-        return clean_body
-    return None
-
-# ============================================================================
-# MULTI-PROVIDER EMAIL WITH FALLBACK
-# ============================================================================
-
-def generate_email_with_fallback(logger: Optional[logging.Logger] = None) -> Tuple[str, str, str, str]:
-    """
-    Try mail.tm first, fallback to guerrillamail.
-    Returns: (email_address, auth_data, provider_name, extra_data)
-    """
-    try:
-        console.print("[cyan]Trying mail.tm...[/cyan]")
-        if logger:
-            logger.info("Attempting mail.tm email generation")
-        
-        email, password, auth = retry_sync(generate_mailtm_email, label="mail.tm generation", logger=logger)
-        console.print(f"[green]✓[/green] mail.tm succeeded: {email}")
-        
-        if logger:
-            logger.info(f"mail.tm email generated: {email}")
-        
-        return email, auth, "mail.tm", password
-    except Exception as e:
-        console.print(f"[yellow]mail.tm failed: {e}[/yellow]")
-        if logger:
-            logger.warning(f"mail.tm failed: {e}")
-        
-        console.print("[cyan]Falling back to guerrillamail...[/cyan]")
-        try:
-            email, sid, timestamp = retry_sync(generate_guerrillamail_email, label="guerrillamail generation", logger=logger)
-            console.print(f"[green]✓[/green] guerrillamail succeeded: {email}")
-            
-            if logger:
-                logger.info(f"guerrillamail email generated: {email}")
-            
-            return email, f"{sid}|{timestamp}", "guerrillamail", ""
-        except Exception as e2:
-            if logger:
-                logger.error(f"All email providers failed. mail.tm: {e}, guerrillamail: {e2}")
-            raise Exception(f"All email providers failed. mail.tm: {e}, guerrillamail: {e2}")
-
-async def smart_poll_inbox_async(provider: str, auth_data: str, timeout: int = 60, logger: Optional[logging.Logger] = None) -> Optional[str]:
-    """Smart async polling for email."""
-    start_time = asyncio.get_running_loop().time()
-    
-    if logger:
-        logger.info(f"Starting email polling (provider={provider}, timeout={timeout}s)")
-    
-    while True:
-        elapsed = asyncio.get_running_loop().time() - start_time
-        
-        if elapsed >= timeout:
-            console.print(f"[red]✗[/red] No email after {timeout}s" + " " * 20)
-            if logger:
-                logger.warning(f"Email polling timeout after {timeout}s")
-            return None
-        
-        try:
-            console.print(f"[dim]Checking inbox... ({int(elapsed)}s elapsed)[/dim]", end="\r")
-            
-            loop = asyncio.get_running_loop()
-            if provider == "mail.tm":
-                content = await loop.run_in_executor(None, check_mailtm_inbox, auth_data)
-            elif provider == "guerrillamail":
-                sid, timestamp = auth_data.split("|")
-                content = await loop.run_in_executor(None, check_guerrillamail_inbox, sid, timestamp)
-            else:
-                return None
-            
-            if content:
-                console.print(f"[green]✓[/green] Email received after {int(elapsed)}s" + " " * 20)
-                if logger:
-                    logger.info(f"Email received after {int(elapsed)}s")
-                return content
-            
-            await asyncio.sleep(2)
-        except Exception as e:
-            if logger:
-                logger.debug(f"Email check error: {e}")
-            await asyncio.sleep(2)
-
-# ============================================================================
-# OTP EXTRACTION
-# ============================================================================
-
-OTP_CONTEXT_REGEX = re.compile(r'(?:code|otp|verif|pin)[\s\S]{0,50}?(\d{4,8})', re.IGNORECASE)
-OTP_FALLBACK_REGEX = re.compile(r'\b(\d{6})\b')
-
-def extract_otp_regex(email_content: str, logger: Optional[logging.Logger] = None) -> Optional[str]:
-    """Extract OTP using regex."""
-    context_match = OTP_CONTEXT_REGEX.search(email_content)
-    if context_match:
-        otp = context_match.group(1)
-        if logger:
-            logger.info(f"OTP extracted via context regex: {otp}")
-        return otp
-    
-    fallback_match = OTP_FALLBACK_REGEX.search(email_content)
-    if fallback_match:
-        otp = fallback_match.group(1)
-        if logger:
-            logger.info(f"OTP extracted via fallback regex: {otp}")
-        return otp
-    
-    return None
-
-def extract_otp_ai(email_content: str, api_key: str, logger: Optional[logging.Logger] = None) -> Optional[str]:
-    """Extract OTP using AI."""
-    API_URL = "https://api.freemodel.dev/v1/chat/completions"
-    
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    payload = {
-        "model": "gpt-5.4-mini",
-        "max_completion_tokens": 10,
-        "messages": [
-            {"role": "system", "content": "Extract the OTP verification code from the email. Return only the digits of the verification code, nothing else."},
-            {"role": "user", "content": email_content[:1000]}
-        ]
-    }
-    
-    response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
-    response.raise_for_status()
-    otp = response.json()["choices"][0]["message"]["content"].strip()
-    
-    otp_digits = re.sub(r'\D', '', otp)
-    
-    if otp_digits and 4 <= len(otp_digits) <= 8:
-        if logger:
-            logger.info(f"OTP extracted via AI: {otp_digits}")
-        return otp_digits
-    
-    return None
 
 def extract_otp(email_content: str, api_key: str = None, logger: Optional[logging.Logger] = None) -> Optional[str]:
     """Extract OTP using local-only regex patterns (no AI)."""

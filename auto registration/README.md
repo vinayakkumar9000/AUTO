@@ -1,4 +1,4 @@
-# 🚀✨ Auto Registration Workflow v3.1.1 ⚡🔥
+# 🚀✨ Auto Registration Workflow v4.0.0 ⚡🔥
 
 <div align="center">
 
@@ -11,7 +11,7 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![AI-Free](https://img.shields.io/badge/AI-Free-brightgreen.svg)](https://github.com)
 
-**Author:** vinayakkumar9000 | **Version:** 3.1.1
+**Author:** vinayakkumar9000 | **Version:** 4.0.0
 
 </div>
 

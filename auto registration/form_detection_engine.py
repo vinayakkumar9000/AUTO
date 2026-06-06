@@ -6,10 +6,13 @@ ENHANCED: iframe interaction support, Shadow DOM pierce selectors
 Author: vinayakkumar9000
 """
 
+# Standard library imports
 import asyncio
 import re
-from typing import List, Dict, Optional, Any, Tuple
-from playwright.async_api import Page, Locator, Frame, ElementHandle
+from typing import Any, Dict, List, Optional, Tuple
+
+# Third-party imports
+from playwright.async_api import ElementHandle, Frame, Locator, Page
 
 
 # ============================================================================

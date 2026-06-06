@@ -5,16 +5,23 @@ Integrates advanced form detection with existing auto_registration.py workflow
 Author: vinayakkumar9000
 """
 
+# Standard library imports
 import asyncio
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
+# Third-party imports
 from playwright.async_api import Page
 
-from form_detection_engine import FormDetectionEngine, FieldCandidate, set_field_value
-from field_handlers import (
-    PasswordManager, UsernameManager, DOBHandler, 
-    CheckboxHandler, DropdownHandler
-)
+# Local module imports
 from dynamic_form_support import DynamicFormHandler
+from field_handlers import (
+    CheckboxHandler,
+    DOBHandler,
+    DropdownHandler,
+    PasswordManager,
+    UsernameManager,
+)
+from form_detection_engine import FieldCandidate, FormDetectionEngine, set_field_value
 
 
 # ============================================================================

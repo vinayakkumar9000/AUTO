@@ -5,11 +5,14 @@ Password, username, DOB, checkbox, and dropdown automation
 Author: vinayakkumar9000
 """
 
+# Standard library imports
 import random
-import string
 import re
-from typing import Optional, List, Dict, Any
+import string
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+
+# Third-party imports
 from playwright.async_api import Locator
 
 
