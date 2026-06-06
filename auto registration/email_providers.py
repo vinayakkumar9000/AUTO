@@ -195,10 +195,14 @@ def check_guerrillamail_inbox(sid_token: str, email_timestamp: str) -> Optional[
 # MULTI-PROVIDER EMAIL WITH AUTOMATIC FALLBACK
 # ============================================================================
 
-def generate_email_with_fallback() -> Tuple[str, str, str, str]:
+def generate_email_with_fallback(max_attempts: int = 3) -> Tuple[str, str, str, str]:
     """
-    Generate temporary email with automatic provider fallback.
+    Generate temporary email with automatic provider fallback and retry support.
     Tries mail.tm first, falls back to guerrillamail if it fails.
+    Supports multiple generation attempts per provider for reliability.
+    
+    Args:
+        max_attempts: Maximum number of email generation attempts per provider (default: 3)
     
     Returns:
         Tuple[str, str, str, str]: (email_address, auth_data, provider_name, extra_data)
@@ -208,25 +212,45 @@ def generate_email_with_fallback() -> Tuple[str, str, str, str]:
         - extra_data: Additional data (password for mail.tm, empty for guerrillamail)
     
     Raises:
-        Exception: If all providers fail
+        Exception: If all providers fail after max_attempts
     """
-    # Try mail.tm first
-    try:
-        console.print("[cyan]Trying mail.tm...[/cyan]")
-        email, password, auth = retry_sync(generate_mailtm_email, label="mail.tm generation")
-        console.print(f"[green]✓[/green] mail.tm succeeded: {email}")
-        return email, auth, "mail.tm", password
-    except Exception as e:
-        console.print(f"[yellow]mail.tm failed: {e}[/yellow]")
+    last_error = None
     
-    # Fallback to guerrillamail
-    console.print("[cyan]Falling back to guerrillamail...[/cyan]")
-    try:
-        email, sid, timestamp = retry_sync(generate_guerrillamail_email, label="guerrillamail generation")
-        console.print(f"[green]✓[/green] guerrillamail succeeded: {email}")
-        return email, f"{sid}|{timestamp}", "guerrillamail", ""
-    except Exception as e2:
-        raise Exception(f"All email providers failed. mail.tm: {e}, guerrillamail: {e2}")
+    # Try mail.tm with multiple attempts
+    for attempt in range(max_attempts):
+        try:
+            if attempt == 0:
+                console.print("[cyan]Trying mail.tm...[/cyan]")
+            else:
+                console.print(f"[cyan]Retrying mail.tm (attempt {attempt + 1}/{max_attempts})...[/cyan]")
+            
+            email, password, auth = retry_sync(generate_mailtm_email, label="mail.tm generation")
+            console.print(f"[green]✓[/green] mail.tm succeeded: {email}")
+            return email, auth, "mail.tm", password
+        except Exception as e:
+            last_error = e
+            console.print(f"[yellow]mail.tm attempt {attempt + 1} failed: {e}[/yellow]")
+            if attempt < max_attempts - 1:
+                time.sleep(2)  # Wait before retry
+    
+    # Fallback to guerrillamail with multiple attempts
+    for attempt in range(max_attempts):
+        try:
+            if attempt == 0:
+                console.print("[cyan]Falling back to guerrillamail...[/cyan]")
+            else:
+                console.print(f"[cyan]Retrying guerrillamail (attempt {attempt + 1}/{max_attempts})...[/cyan]")
+            
+            email, sid, timestamp = retry_sync(generate_guerrillamail_email, label="guerrillamail generation")
+            console.print(f"[green]✓[/green] guerrillamail succeeded: {email}")
+            return email, f"{sid}|{timestamp}", "guerrillamail", ""
+        except Exception as e2:
+            last_error = e2
+            console.print(f"[yellow]guerrillamail attempt {attempt + 1} failed: {e2}[/yellow]")
+            if attempt < max_attempts - 1:
+                time.sleep(2)  # Wait before retry
+    
+    raise Exception(f"All email providers failed after {max_attempts} attempts. Last error: {last_error}")
 
 
 def check_inbox(provider: str, auth_data: str) -> Optional[str]:

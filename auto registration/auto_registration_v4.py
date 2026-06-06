@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Auto Registration Workflow v4.0.0 - AI-Free Production Release
-Universal, robust automation with advanced form detection
-Integrates: FormDetectionEngine, FieldHandlers, DynamicFormSupport
+Auto Registration Workflow v4.1.0 - Production-Ready Release
+Universal automation with magic link support, OCR, and enhanced framework compatibility
+Integrates: FormDetectionEngine, FieldHandlers, DynamicFormSupport, MagicLinkHandler, ImageOCR
 Author: vinayakkumar9000
 """
 
@@ -32,6 +32,8 @@ from email_providers import generate_email_with_fallback, smart_poll_inbox_async
 from form_detection_engine import FormDetectionEngine
 from identity_generator import generate_identity
 from integration_layer import UnifiedFormFiller
+from magic_link_handler import extract_magic_link_with_context, extract_domain_from_url
+from image_otp_extractor import extract_otp_from_email_images
 from retry_utils import retry_async, retry_sync
 
 console = Console()
@@ -278,26 +280,80 @@ async def run_automation(url: str, api_key: str) -> None:
                 logger.warning(f"Send code button error: {e}")
                 console.print("[yellow]⚠[/yellow] Send code step skipped")
             
-            # Step 7: Wait for Email
+            # Step 7: Wait for Email (Extended timeout for delayed emails)
             console.print("\n[bold cyan]═══ Step 6: Wait for Email ═══[/bold cyan]")
-            email_content = await smart_poll_inbox_async(provider, auth_data, timeout=60)
+            email_content = await smart_poll_inbox_async(provider, auth_data, timeout=180)
             
             if not email_content:
                 logger.error("No email received within timeout")
                 await capture_screenshot(page, session_id, "05_no_email", logger)
-                raise Exception("No email received within 60 seconds")
+                raise Exception("No email received within 180 seconds")
             
             logger.info(f"Email received, length: {len(email_content)} chars")
             
-            # Step 8: Extract OTP
-            console.print("\n[bold cyan]═══ Step 7: Extract OTP ═══[/bold cyan]")
+            # Step 7.5: Check for Magic Link or OTP
+            console.print("\n[bold cyan]═══ Step 7: Detect Verification Type ═══[/bold cyan]")
+            registration_domain = extract_domain_from_url(url)
+            magic_link, verification_type = extract_magic_link_with_context(
+                email_content, 
+                registration_domain, 
+                verbose=True
+            )
+            
+            if verification_type == "magic_link" and magic_link:
+                # Handle magic link verification
+                console.print(f"[cyan]Opening magic link...[/cyan]")
+                logger.info(f"Magic link detected: {magic_link}")
+                
+                current_url = page.url
+                await page.goto(magic_link, wait_until="domcontentloaded", timeout=30000)
+                await asyncio.sleep(2)
+                
+                new_url = page.url
+                if new_url != current_url:
+                    console.print(f"[green]✓[/green] Magic link verified (URL changed)")
+                    logger.info(f"Magic link verification successful: {new_url}")
+                    await capture_screenshot(page, session_id, "09_magic_link_verified", logger)
+                    
+                    # Success - skip OTP steps
+                    console.print("\n[bold green]═══════════════════════════════════[/bold green]")
+                    console.print("[bold green]    ✓ REGISTRATION COMPLETED    [/bold green]")
+                    console.print("[bold green]═══════════════════════════════════[/bold green]\n")
+                    
+                    console.print(Panel(
+                        f"[bold]URL:[/bold] {url}\n"
+                        f"[bold]Email:[/bold] {email}\n"
+                        f"[bold]Provider:[/bold] {provider}\n"
+                        f"[bold]Identity:[/bold] {identity.full_name}\n"
+                        f"[bold]Verification:[/bold] Magic Link\n"
+                        f"[bold]Final URL:[/bold] {new_url}",
+                        title="📋 Registration Summary",
+                        border_style="green"
+                    ))
+                    return
+                else:
+                    logger.warning("Magic link did not change URL, falling back to OTP")
+                    console.print("[yellow]⚠[/yellow] Magic link did not redirect, trying OTP...")
+            
+            # Step 8: Extract OTP (fallback or primary method)
+            console.print("\n[bold cyan]═══ Step 8: Extract OTP ═══[/bold cyan]")
             otp = extract_otp(email_content, api_key, logger)
             
+            # Fallback: Try image OCR if text extraction failed
             if not otp:
-                logger.error("Failed to extract OTP from email")
+                console.print("[yellow]⚠[/yellow] Text OTP extraction failed, trying image OCR...")
+                logger.info("Attempting image-based OTP extraction")
+                otp = extract_otp_from_email_images(email_content, verbose=True)
+                
+                if otp:
+                    console.print(f"[green]✓[/green] OTP extracted from image: {otp}")
+                    logger.info(f"OTP extracted from image: {otp}")
+            
+            if not otp:
+                logger.error("Failed to extract OTP from email (text and image methods)")
                 logger.debug(f"Email content preview: {email_content[:500]}")
                 await capture_screenshot(page, session_id, "06_otp_extract_failed", logger)
-                raise Exception("Failed to extract OTP from email")
+                raise Exception("Failed to extract OTP from email using all methods")
             
             # Step 9: Wait for OTP Field (Dynamic Form Support)
             console.print("\n[bold cyan]═══ Step 8: Enter OTP ═══[/bold cyan]")
