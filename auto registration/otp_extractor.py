@@ -26,31 +26,41 @@ class OTPMatch:
 
 # Pattern format: (regex, confidence_score, pattern_name)
 OTP_PATTERNS = [
+    # High confidence - explicit context with 7 digits (IBM Bob, etc.)
+    (r'(?:verification|verify|confirmation|confirm)\s*(?:code|token)[\s:]*(\d{7})', 100, 'verify_7digit'),
+    (r'(?:otp|one[\s-]?time[\s-]?password)[\s:]*(\d{7})', 100, 'otp_7digit'),
+    (r'(?:authentication|auth)\s*(?:code|token)[\s:]*(\d{7})', 100, 'auth_7digit'),
+    (r'(?:security|access)\s*(?:code|token)[\s:]*(\d{7})', 100, 'security_7digit'),
+    
     # High confidence - explicit context with 6 digits
-    (r'(?:verification|verify|confirmation|confirm)\s*code[\s:]*(\d{6})', 100, 'verify_6digit'),
-    (r'(?:otp|one[\s-]?time[\s-]?password)[\s:]*(\d{6})', 100, 'otp_6digit'),
-    (r'(?:authentication|auth)\s*code[\s:]*(\d{6})', 100, 'auth_6digit'),
-    (r'(?:security|access)\s*code[\s:]*(\d{6})', 95, 'security_6digit'),
+    (r'(?:verification|verify|confirmation|confirm)\s*code[\s:]*(\d{6})', 95, 'verify_6digit'),
+    (r'(?:otp|one[\s-]?time[\s-]?password)[\s:]*(\d{6})', 95, 'otp_6digit'),
+    (r'(?:authentication|auth)\s*code[\s:]*(\d{6})', 95, 'auth_6digit'),
+    (r'(?:security|access)\s*code[\s:]*(\d{6})', 90, 'security_6digit'),
     
     # High confidence - explicit context with 4 digits
-    (r'(?:verification|verify|confirmation|confirm)\s*code[\s:]*(\d{4})', 95, 'verify_4digit'),
-    (r'(?:otp|one[\s-]?time[\s-]?password)[\s:]*(\d{4})', 95, 'otp_4digit'),
-    (r'(?:pin|personal\s*identification)[\s:]*(\d{4})', 95, 'pin_4digit'),
+    (r'(?:verification|verify|confirmation|confirm)\s*code[\s:]*(\d{4})', 90, 'verify_4digit'),
+    (r'(?:otp|one[\s-]?time[\s-]?password)[\s:]*(\d{4})', 90, 'otp_4digit'),
+    (r'(?:pin|personal\s*identification)[\s:]*(\d{4})', 90, 'pin_4digit'),
     
     # High confidence - explicit context with 8 digits
-    (r'(?:verification|verify|confirmation|confirm)\s*code[\s:]*(\d{8})', 90, 'verify_8digit'),
-    (r'(?:otp|one[\s-]?time[\s-]?password)[\s:]*(\d{8})', 90, 'otp_8digit'),
+    (r'(?:verification|verify|confirmation|confirm)\s*code[\s:]*(\d{8})', 85, 'verify_8digit'),
+    (r'(?:otp|one[\s-]?time[\s-]?password)[\s:]*(\d{8})', 85, 'otp_8digit'),
     
     # Medium confidence - keyword followed by digits within 50 chars
+    (r'(?:code|otp|verif|pin|token)[\s\S]{0,50}?(\d{7})', 90, 'keyword_7digit'),
     (r'(?:code|otp|verif|pin|token)[\s\S]{0,50}?(\d{6})', 85, 'keyword_6digit'),
     (r'(?:code|otp|verif|pin|token)[\s\S]{0,50}?(\d{4})', 80, 'keyword_4digit'),
     (r'(?:code|otp|verif|pin|token)[\s\S]{0,50}?(\d{8})', 75, 'keyword_8digit'),
     
     # Medium confidence - "your code is" patterns
-    (r'your\s+(?:verification|confirmation|security|access)?\s*code\s+is[\s:]*(\d{4,8})', 90, 'your_code_is'),
-    (r'code\s+is[\s:]*(\d{4,8})', 85, 'code_is'),
+    (r'your\s+(?:verification|confirmation|security|access)?\s*(?:code|token)\s+is[\s:]*(\d{4,8})', 90, 'your_code_is'),
+    (r'(?:code|token)\s+is[\s:]*(\d{4,8})', 85, 'code_is'),
     
     # Medium confidence - HTML/email specific patterns
+    (r'<strong[^>]*>(\d{7})</strong>', 90, 'html_strong_7digit'),
+    (r'<b[^>]*>(\d{7})</b>', 90, 'html_bold_7digit'),
+    (r'<span[^>]*>(\d{7})</span>', 85, 'html_span_7digit'),
     (r'<strong[^>]*>(\d{6})</strong>', 85, 'html_strong_6digit'),
     (r'<b[^>]*>(\d{6})</b>', 85, 'html_bold_6digit'),
     (r'<span[^>]*>(\d{6})</span>', 80, 'html_span_6digit'),
@@ -59,7 +69,8 @@ OTP_PATTERNS = [
     (r'(\d{3}[\s-]\d{3})', 80, 'formatted_6digit'),  # 123-456 or 123 456
     (r'(\d{4}[\s-]\d{4})', 75, 'formatted_8digit'),  # 1234-5678
     
-    # Lower confidence - standalone digits (prefer 6-digit)
+    # Lower confidence - standalone digits (prefer 7-digit for IBM Bob)
+    (r'\b(\d{7})\b', 75, 'standalone_7digit'),
     (r'\b(\d{6})\b', 70, 'standalone_6digit'),
     (r'\b(\d{4})\b', 60, 'standalone_4digit'),
     (r'\b(\d{8})\b', 55, 'standalone_8digit'),

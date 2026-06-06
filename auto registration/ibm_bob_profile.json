@@ -1,0 +1,85 @@
+{
+  "domain": "bob.ibm.com",
+  "framework": "React",
+  "verification_type": "email_otp",
+  "multi_step": true,
+  "otp_digits": 7,
+  "country_dropdown": true,
+  "success_pattern": "authenticated_session",
+  "known_fields": {
+    "email": ["input[type='email']", "input[name='email']"],
+    "password": ["input[type='password']", "input[name='password']"],
+    "first_name": ["input[name='firstName']", "input[placeholder*='First']"],
+    "last_name": ["input[name='lastName']", "input[placeholder*='Last']"],
+    "country": ["select[name='country']", "select[name='countryOrRegion']"],
+    "company": ["input[name='company']"],
+    "verification_token": ["input[name='verificationToken']", "input[placeholder*='token']", "input[placeholder*='code']"]
+  },
+  "workflow_steps": [
+    {
+      "step": 1,
+      "name": "Fill Account Information",
+      "fields": ["email", "password", "first_name", "last_name", "country", "company"],
+      "required": ["email", "password", "first_name", "last_name", "country"]
+    },
+    {
+      "step": 2,
+      "name": "Click Next Button",
+      "button_text": "Next",
+      "wait_for": "verification_section"
+    },
+    {
+      "step": 3,
+      "name": "Wait for Email",
+      "timeout": 180,
+      "poll_interval": 5
+    },
+    {
+      "step": 4,
+      "name": "Extract 7-Digit OTP",
+      "otp_format": "\\b\\d{7}\\b",
+      "otp_context": ["verification", "token", "code"]
+    },
+    {
+      "step": 5,
+      "name": "Fill Verification Token",
+      "field": "verification_token"
+    },
+    {
+      "step": 6,
+      "name": "Accept Terms",
+      "optional_checkboxes": ["marketing"],
+      "required_checkboxes": ["terms"]
+    },
+    {
+      "step": 7,
+      "name": "Submit Registration",
+      "button_text": "Submit"
+    },
+    {
+      "step": 8,
+      "name": "Verify Success",
+      "success_indicators": [
+        "url_contains:/dashboard",
+        "url_contains:/trial",
+        "text_contains:Welcome",
+        "text_contains:Trial Activated",
+        "text_contains:Account Created",
+        "element_exists:avatar",
+        "element_exists:profile menu",
+        "element_exists:logout"
+      ]
+    }
+  ],
+  "anti_bot_mechanisms": [],
+  "complexity_score": 0.7,
+  "notes": [
+    "Multi-step form with dynamic rendering",
+    "Country field is dropdown, not text input",
+    "OTP is 7 digits, not standard 6 digits",
+    "Verification section appears after clicking Next",
+    "React-based application with client-side validation",
+    "Email verification required before account activation"
+  ],
+  "last_updated": "2026-06-06T09:06:00Z"
+}

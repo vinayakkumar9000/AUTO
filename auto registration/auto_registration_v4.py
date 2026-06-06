@@ -6,13 +6,20 @@ Integrates: FormDetectionEngine, FieldHandlers, DynamicFormSupport, MagicLinkHan
 Author: vinayakkumar9000
 """
 
+# Fix Windows console encoding for Unicode characters
+import sys
+import os
+if sys.platform == 'win32':
+    import codecs
+    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+
 # Standard library imports
 import asyncio
 import json
 import logging
-import os
 import re
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -152,7 +159,7 @@ def extract_otp(email_content: str, api_key: str = None, logger: Optional[loggin
     """Extract OTP using local-only regex patterns (no AI)."""
     from otp_extractor import extract_otp as extract_otp_local
     
-    otp = extract_otp_local(email_content, preferred_length=6, min_confidence=60, verbose=False)
+    otp = extract_otp_local(email_content, preferred_length=7, min_confidence=60, verbose=False)
     if otp:
         console.print(f"[green]✓[/green] OTP extracted: {otp}")
         if logger:
@@ -377,7 +384,18 @@ async def run_automation(url: str, api_key: str) -> None:
                     console.print("[yellow]⚠[/yellow] No action button found, continuing...")
                     logger.warning("No action button found")
                 
+                # Wait for page to stabilize after button click
+                await asyncio.sleep(3)
+                
+                # Wait for any navigation or dynamic content to complete
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=5000)
+                except:
+                    pass
+                
+                # Additional wait for React/dynamic forms
                 await asyncio.sleep(2)
+                
                 await capture_screenshot(page, session_id, "04_code_sent", logger)
             
             except Exception as e:
@@ -554,17 +572,34 @@ async def run_automation(url: str, api_key: str) -> None:
             logger.info(f"Session ID: {session_id}")
             logger.info(f"Log file: {LOG_DIR / f'session_{session_id}.log'}")
             
+            # Save credentials to file
+            credentials_file = Path(__file__).parent / "successful_registrations.txt"
+            with open(credentials_file, "a", encoding="utf-8") as f:
+                f.write(f"\n{'='*80}\n")
+                f.write(f"Registration Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"URL: {url}\n")
+                f.write(f"Email: {email}\n")
+                f.write(f"Password: SecurePass123!@#\n")
+                f.write(f"Identity: {identity.full_name}\n")
+                f.write(f"OTP Used: {otp}\n")
+                f.write(f"Final URL: {current_url}\n")
+                f.write(f"Session ID: {session_id}\n")
+                f.write(f"{'='*80}\n")
+            
+            console.print(f"\n[green]✓[/green] Credentials saved to: {credentials_file}")
+            logger.info(f"Credentials saved to: {credentials_file}")
+            
             console.print(Panel(
                 f"[bold]URL:[/bold] {url}\n"
                 f"[bold]Email:[/bold] {email}\n"
+                f"[bold]Password:[/bold] SecurePass123!@#\n"
                 f"[bold]Provider:[/bold] {provider}\n"
                 f"[bold]Identity:[/bold] {identity.full_name}\n"
                 f"[bold]OTP:[/bold] {otp}\n"
-                f"[bold]Password:[/bold] {filler.get_generated_password() or 'N/A'}\n"
-                f"[bold]Username:[/bold] {filler.get_generated_username() or 'N/A'}\n"
                 f"[bold]Final URL:[/bold] {current_url}\n"
                 f"[bold]Session ID:[/bold] {session_id}\n"
-                f"[bold]Log:[/bold] .logs/session_{session_id}.log",
+                f"[bold]Log:[/bold] .logs/session_{session_id}.log\n"
+                f"[bold]Credentials:[/bold] successful_registrations.txt",
                 title="📋 Registration Summary",
                 border_style="green"
             ))
@@ -589,13 +624,25 @@ async def run_automation(url: str, api_key: str) -> None:
 
 def main():
     """Main CLI entry point."""
+    import argparse
+    
     console.print("\n[bold cyan]╔═══════════════════════════════════════╗[/bold cyan]")
     console.print("[bold cyan]║   Auto Registration Workflow v4.0    ║[/bold cyan]")
     console.print("[bold cyan]║        ENHANCED EDITION              ║[/bold cyan]")
     console.print("[bold cyan]╚═══════════════════════════════════════╝[/bold cyan]\n")
     
+    # Parse arguments
+    parser = argparse.ArgumentParser(description='Auto Registration Workflow')
+    parser.add_argument('--url', type=str, help='Registration URL')
+    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
+    parser.add_argument('--ai-mode', action='store_true', help='Enable AI-powered analysis')
+    parser.add_argument('--api-key', type=str, default='', help='API key for AI services')
+    args = parser.parse_args()
+    
     # Get URL
-    if len(sys.argv) > 1:
+    if args.url:
+        url = args.url
+    elif len(sys.argv) > 1 and not sys.argv[1].startswith('--'):
         url = sys.argv[1]
     else:
         url = Prompt.ask("Enter registration URL")
@@ -604,9 +651,14 @@ def main():
         console.print("[red]✗[/red] Invalid URL. Must start with http:// or https://")
         return
     
-    # Run automation (AI-free, no API key needed)
+    # Set debug logging if requested
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+        console.print("[yellow]Debug logging enabled[/yellow]")
+    
+    # Run automation
     try:
-        asyncio.run(run_automation(url, api_key=""))
+        asyncio.run(run_automation(url, api_key=args.api_key))
     except Exception:
         sys.exit(1)
 

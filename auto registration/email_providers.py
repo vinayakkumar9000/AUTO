@@ -100,28 +100,36 @@ def check_mailtm_inbox(auth_token: str) -> Optional[str]:
     BASE = "https://api.mail.tm"
     headers = {"Authorization": f"Bearer {auth_token}"}
     
-    # Get inbox messages
-    inbox_res = requests.get(f"{BASE}/messages", headers=headers, timeout=15)
-    inbox_res.raise_for_status()
-    messages = inbox_res.json()["hydra:member"]
-    
-    if not messages:
-        return None
-    
-    # Get first message content
-    message_id = messages[0]["id"]
-    full_res = requests.get(f"{BASE}/messages/{message_id}", headers=headers, timeout=15)
-    full_res.raise_for_status()
-    data = full_res.json()
-    
-    # Extract content (prefer text, fallback to HTML)
-    content = data.get("text") or data.get("html") or ""
-    
-    # Clean HTML if present
-    if content and "<" in content:
-        content = html.unescape(re.sub(r'<[^>]+>', ' ', content))
-    
-    return content
+    try:
+        # Get inbox messages
+        inbox_res = requests.get(f"{BASE}/messages", headers=headers, timeout=15)
+        inbox_res.raise_for_status()
+        messages = inbox_res.json()["hydra:member"]
+        
+        if not messages:
+            return None
+        
+        # Get first message content
+        message_id = messages[0]["id"]
+        full_res = requests.get(f"{BASE}/messages/{message_id}", headers=headers, timeout=15)
+        full_res.raise_for_status()
+        data = full_res.json()
+        
+        # Extract content (prefer text, fallback to HTML)
+        content = data.get("text") or data.get("html") or ""
+        
+        # Clean HTML if present
+        if content and "<" in content:
+            content = html.unescape(re.sub(r'<[^>]+>', ' ', content))
+        
+        return content
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 401:
+            console.print(f"\n[red]✗ mail.tm auth failed (401 Unauthorized)[/red]")
+        raise
+    except Exception as e:
+        console.print(f"\n[yellow]⚠ mail.tm error: {e}[/yellow]")
+        raise
 
 
 # ============================================================================

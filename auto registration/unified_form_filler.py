@@ -76,7 +76,8 @@ class UnifiedFormFiller:
         
         # Fill each field
         for field in fields:
-            field_type = field.get("type", "unknown")
+            # FieldCandidate objects have field_type attribute, not dict
+            field_type = field.field_type if hasattr(field, 'field_type') else field.get("type", "unknown")
             
             if field_type in field_data:
                 value = field_data[field_type]
@@ -97,7 +98,7 @@ class UnifiedFormFiller:
         if len(new_fields) > len(fields):
             self.log(f"Found {len(new_fields) - len(fields)} new dynamic fields")
             for field in new_fields[len(fields):]:
-                field_type = field.get("type", "unknown")
+                field_type = field.field_type if hasattr(field, 'field_type') else field.get("type", "unknown")
                 if field_type in field_data and field_type not in self.filled_fields:
                     value = field_data[field_type]
                     success = await self._fill_field(field, value)
@@ -147,21 +148,26 @@ class UnifiedFormFiller:
         
         return data
     
-    async def _fill_field(self, field: Dict[str, Any], value: str) -> bool:
+    async def _fill_field(self, field, value: str) -> bool:
         """
         Fill a single field.
         
         Args:
-            field: Field information dictionary
+            field: FieldCandidate object or field information dictionary
             value: Value to fill
         
         Returns:
             True if successful, False otherwise
         """
         try:
-            element = field.get("element")
-            if not element:
-                return False
+            # Handle FieldCandidate objects (have locator attribute)
+            if hasattr(field, 'locator'):
+                element = field.locator
+            else:
+                # Handle dict-based fields (legacy)
+                element = field.get("element")
+                if not element:
+                    return False
             
             # Clear existing value
             await element.fill("")
@@ -218,6 +224,64 @@ class UnifiedFormFiller:
         except Exception as e:
             self.log(f"Error clicking submit: {e}")
             return False
+    
+    async def wait_for_otp_field(self, timeout: int = 15) -> Optional[Any]:
+        """
+        Wait for OTP field to appear on the page.
+        
+        Args:
+            timeout: Maximum time to wait in seconds
+        
+        Returns:
+            Locator for OTP field if found, None otherwise
+        """
+        try:
+            # Common OTP field selectors
+            otp_selectors = [
+                'input[name*="otp" i]',
+                'input[id*="otp" i]',
+                'input[name*="code" i]',
+                'input[id*="code" i]',
+                'input[name*="verification" i]',
+                'input[id*="verification" i]',
+                'input[name*="token" i]',
+                'input[id*="token" i]',
+                'input[placeholder*="code" i]',
+                'input[placeholder*="otp" i]',
+                'input[aria-label*="code" i]',
+                'input[aria-label*="otp" i]',
+            ]
+            
+            # Try each selector
+            for selector in otp_selectors:
+                try:
+                    otp_field = await self.page.wait_for_selector(
+                        selector, 
+                        timeout=timeout * 1000,
+                        state='visible'
+                    )
+                    if otp_field:
+                        self.log(f"✓ Found OTP field: {selector}")
+                        return self.page.locator(selector).first
+                except:
+                    continue
+            
+            # Fallback: scan for newly appeared input fields
+            self.log("Scanning for new input fields...")
+            await asyncio.sleep(2)
+            
+            new_fields = await self.engine.discover_all_fields()
+            for field in new_fields:
+                if field.field_type == 'otp':
+                    self.log(f"✓ Found OTP field via scan")
+                    return field.locator
+            
+            self.log("✗ OTP field not found")
+            return None
+            
+        except Exception as e:
+            self.log(f"Error waiting for OTP field: {e}")
+            return None
     
     def get_filled_fields(self) -> Dict[str, bool]:
         """Get dictionary of filled fields."""
