@@ -1,3 +1,5 @@
 {
-  "freemodel_api_key": "fe_oa_f61b509509679e8e0d0f46aca875758dc2a8852a858cff37"
+  "freemodel_api_key": "fe_oa_f61b509509679e8e0d0f46aca875758dc2a8852a858cff37",
+  "b_ai_api_key": "sk-s5v3aen8enrkqqq8e4ua5f164x262ghv",
+  "ai_model": "deepseek-v4-flash"
 }

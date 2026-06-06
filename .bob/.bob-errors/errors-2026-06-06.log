@@ -1,0 +1,89 @@
+
+================================================================================
+ERROR LOGGED: 2026-06-06T05:29:58.842Z
+User ID: Vinayak@vinayakkumar.me
+================================================================================
+Error Name: GatewayError
+Error Message: Request failed after 6 attempts: fetch failed
+
+Stack Trace:
+GatewayError: Request failed after 6 attempts: fetch failed
+    at t.fetch (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:777:4624)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async t.createChatCompletion (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:777:8410)
+    at async fnt.createChatCompletionWithTokenRenewal (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2152:235)
+    at async fnt.generateContentStreamInternal (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2157:52)
+    at async H6.loggingStreamWrapper (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:800:31296)
+    at async gY.processStreamResponse (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2463:81)
+    at async file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2457:22044
+    at async kQ.run (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2463:3153)
+    at async nwe.sendMessageStream (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2796:511)
+================================================================================
+
+
+================================================================================
+ERROR LOGGED: 2026-06-06T06:01:04.435Z
+User ID: Vinayak@vinayakkumar.me
+================================================================================
+Error Name: Error
+Error Message: Authentication timeout (3 minutes)
+
+Stack Trace:
+Error: Authentication timeout (3 minutes)
+    at Timeout._onTimeout (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2095:91)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+================================================================================
+
+
+================================================================================
+ERROR LOGGED: 2026-06-06T06:08:43.740Z
+User ID: Vinayak@vinayakkumar.me
+================================================================================
+Error Name: Error
+Error Message: ripgrep exited with code 2: the literal '"\n"' is not allowed in a regex
+
+Consider enabling multiline mode with the --multiline flag (or -U for short).
+When multiline mode is enabled, new line characters can be matched.
+
+
+Stack Trace:
+Error: ripgrep exited with code 2: the literal '"\n"' is not allowed in a regex
+
+Consider enabling multiline mode with the --multiline flag (or -U for short).
+When multiline mode is enabled, new line characters can be matched.
+
+    at ChildProcess.<anonymous> (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2272:1451)
+    at ChildProcess.emit (node:events:508:28)
+    at maybeClose (node:internal/child_process:1101:16)
+    at Socket.<anonymous> (node:internal/child_process:457:11)
+    at Socket.emit (node:events:508:28)
+    at Pipe.<anonymous> (node:net:346:12)
+================================================================================
+
+
+================================================================================
+ERROR LOGGED: 2026-06-06T06:08:43.741Z
+User ID: Vinayak@vinayakkumar.me
+================================================================================
+Error Name: Error
+Error Message: ripgrep exited with code 2: the literal '"\n"' is not allowed in a regex
+
+Consider enabling multiline mode with the --multiline flag (or -U for short).
+When multiline mode is enabled, new line characters can be matched.
+
+
+Stack Trace:
+Error: ripgrep exited with code 2: the literal '"\n"' is not allowed in a regex
+
+Consider enabling multiline mode with the --multiline flag (or -U for short).
+When multiline mode is enabled, new line characters can be matched.
+
+    at ChildProcess.<anonymous> (file:///C:/Users/vinay/AppData/Roaming/npm/node_modules/bobshell/bundle/bob.js:2272:1451)
+    at ChildProcess.emit (node:events:508:28)
+    at maybeClose (node:internal/child_process:1101:16)
+    at Socket.<anonymous> (node:internal/child_process:457:11)
+    at Socket.emit (node:events:508:28)
+    at Pipe.<anonymous> (node:net:346:12)
+================================================================================
+

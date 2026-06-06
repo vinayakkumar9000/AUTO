@@ -217,6 +217,37 @@ class ModelRouter:
         except Exception:
             self.preferred_models = {}
     
+
+    @property
+    def models(self):
+        """Get list of all available models."""
+        all_models = []
+        all_models.extend(self.tier_1_models)
+        all_models.extend(self.tier_2_models)
+        all_models.extend(self.tier_3_models)
+        all_models.extend(self.tier_4_models)
+        return all_models
+    
+    @property
+    def tier_1_models(self):
+        """Get tier 1 (FAST) models."""
+        return [m for m, c in MODEL_CATALOG.items() if c.tier == ModelTier.FAST]
+    
+    @property
+    def tier_2_models(self):
+        """Get tier 2 (BALANCED) models."""
+        return [m for m, c in MODEL_CATALOG.items() if c.tier == ModelTier.BALANCED]
+    
+    @property
+    def tier_3_models(self):
+        """Get tier 3 (ADVANCED) models."""
+        return [m for m, c in MODEL_CATALOG.items() if c.tier == ModelTier.ADVANCED]
+    
+    @property
+    def tier_4_models(self):
+        """Get tier 4 (PREMIUM) models."""
+        return [m for m, c in MODEL_CATALOG.items() if c.tier == ModelTier.PREMIUM]
+
     def select_model(
         self,
         task_type: str,

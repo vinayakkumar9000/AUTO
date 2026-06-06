@@ -23,7 +23,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "identity"))
 from identity_generator import generate_identity
-from integration_layer import UnifiedFormFiller
+from unified_form_filler import UnifiedFormFiller
 
 console = Console()
 

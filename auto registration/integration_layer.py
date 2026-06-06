@@ -362,7 +362,9 @@ def create_integration_layer(
         IntegrationLayer instance
     """
     # Initialize components
-    model_router = ModelRouter(config_path=config_path)
+    from pathlib import Path
+    config_file = Path(config_path) if config_path else None
+    model_router = ModelRouter(config_file=config_file)
     domain_intelligence = DomainIntelligence()
     
     return IntegrationLayer(
@@ -449,3 +451,56 @@ if __name__ == "__main__":
         console.print(f"  Workflow ID: {result.get('workflow_id')}")
     
     asyncio.run(test())
+
+
+# ============================================================================
+# BACKWARD COMPATIBILITY WRAPPER
+# ============================================================================
+
+class UnifiedFormFiller:
+    """
+    Backward compatibility wrapper for v4 script.
+    Bridges old deterministic flow with new multi-agent system.
+    """
+    
+    def __init__(self, config_path: Optional[str] = None):
+        """
+        Initialize unified form filler.
+        
+        Args:
+            config_path: Optional path to config file
+        """
+        self.config_path = config_path
+        self.integration = None
+    
+    async def fill_form(self, page, url: str, identity_data: dict) -> dict:
+        """
+        Fill form using multi-agent system.
+        
+        Args:
+            page: Playwright page object
+            url: Target URL
+            identity_data: User identity data
+        
+        Returns:
+            Result dictionary with success status
+        """
+        # Lazy initialization
+        if self.integration is None:
+            self.integration = create_integration_layer(
+                config_path=self.config_path
+            )
+        
+        # Execute registration using multi-agent system
+        result = await self.integration.execute_registration(
+            url=url,
+            identity_data=identity_data
+        )
+        
+        return result
+    
+    def get_stats(self) -> dict:
+        """Get usage statistics."""
+        if self.integration:
+            return self.integration.get_stats()
+        return {}

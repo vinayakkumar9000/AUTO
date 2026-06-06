@@ -10,6 +10,7 @@ Author: vinayakkumar9000
 import asyncio
 import json
 import logging
+import os
 import re
 import sys
 from datetime import datetime
@@ -31,10 +32,21 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "identity"))
 from email_providers import generate_email_with_fallback, smart_poll_inbox_async
 from form_detection_engine import FormDetectionEngine
 from identity_generator import generate_identity
-from integration_layer import UnifiedFormFiller
 from magic_link_handler import extract_magic_link_with_context, extract_domain_from_url
 from image_otp_extractor import extract_otp_from_email_images
 from retry_utils import retry_async, retry_sync
+from unified_form_filler import UnifiedFormFiller
+
+# Multi-agent system integration (optional, enabled via environment variable)
+USE_MULTI_AGENT = os.getenv("USE_MULTI_AGENT", "false").lower() == "true"
+MULTI_AGENT_AVAILABLE = False
+
+if USE_MULTI_AGENT:
+    try:
+        from integration_layer import create_integration_layer
+        MULTI_AGENT_AVAILABLE = True
+    except ImportError as e:
+        console.print(f"[yellow]⚠ Multi-agent system unavailable: {e}[/yellow]")
 
 # AI integration (optional)
 try:
@@ -187,6 +199,18 @@ async def run_automation(url: str, api_key: str) -> None:
     logger.info(f"NEW SESSION STARTED: {session_id}")
     logger.info(f"Target URL: {url}")
     logger.info("="*80)
+    
+    # Check if multi-agent mode is enabled
+    if USE_MULTI_AGENT and MULTI_AGENT_AVAILABLE:
+        console.print("\n[bold magenta]🤖 MULTI-AGENT MODE ENABLED[/bold magenta]")
+        logger.info("Using multi-agent system for registration")
+        
+        from run_multi_agent import run_multi_agent_registration
+        result = await run_multi_agent_registration(url, session_id, logger)
+        
+        if not result.get("success"):
+            raise Exception(result.get("error", "Multi-agent registration failed"))
+        return
     
     # Initialize AI helper (optional)
     ai_helper = None
