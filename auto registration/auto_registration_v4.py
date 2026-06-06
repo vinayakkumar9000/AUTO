@@ -10,6 +10,7 @@ Author: vinayakkumar9000
 import asyncio
 import json
 import logging
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +21,7 @@ import requests
 from playwright.async_api import async_playwright, Page
 from rich.console import Console
 from rich.panel import Panel
+from rich.prompt import Prompt
 
 # Add parent directories to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "tempmail"))
@@ -195,7 +197,7 @@ async def run_automation(url: str, api_key: str) -> None:
         
         # Step 2: Generate Email
         console.print("\n[bold cyan]═══ Step 2: Generate Email ═══[/bold cyan]")
-        email, auth_data, provider, _ = generate_email_with_fallback(logger)
+        email, auth_data, provider, _ = generate_email_with_fallback()
         
         # Step 3: Launch Browser
         console.print("\n[bold cyan]═══ Step 3: Launch Browser ═══[/bold cyan]")
@@ -278,7 +280,7 @@ async def run_automation(url: str, api_key: str) -> None:
             
             # Step 7: Wait for Email
             console.print("\n[bold cyan]═══ Step 6: Wait for Email ═══[/bold cyan]")
-            email_content = await smart_poll_inbox_async(provider, auth_data, timeout=60, logger=logger)
+            email_content = await smart_poll_inbox_async(provider, auth_data, timeout=60)
             
             if not email_content:
                 logger.error("No email received within timeout")
